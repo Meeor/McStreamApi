@@ -1,0 +1,20 @@
+name: McStreamApi
+version: ${version}
+main: kr.meeor.mcstreamapi.McStreamApiPlugin
+api-version: "1.21"
+author: Meeor
+description: OAuth-based SOOP/Chzzk donation rewards for Minecraft servers.
+commands:
+  mca:
+    description: McStreamApi command
+    usage: /mca
+permissions:
+  mcstreamapi.reload:
+    description: Allows reloading McStreamApi configuration.
+    default: false
+  mcstreamapi.apply:
+    description: Allows manually applying McStreamApi rewards.
+    default: false
+  mcstreamapi.status:
+    description: Allows checking McStreamApi status.
+    default: false

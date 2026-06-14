@@ -1,0 +1,30 @@
+auth:
+  serverBaseUrl: "https://auth.example.com/mca"
+  sharedSecret: "CHANGE_ME_RANDOM_LONG_SECRET"
+  pollingIntervalSeconds: 3
+  pairingTimeoutSeconds: 600
+
+token:
+  maxRefreshRetries: 3
+  refreshRetryDelaySeconds: 3
+
+platforms:
+  chzzk:
+    enabled: true
+    clientId: "CHZZK_CLIENT_ID"
+    clientSecret: "CHZZK_CLIENT_SECRET"
+    eventPollingIntervalSeconds: 5
+    tokenRefreshBeforeSeconds: 300
+
+  soop:
+    enabled: true
+    clientId: "SOOP_CLIENT_ID"
+    clientSecret: "SOOP_CLIENT_SECRET"
+    eventPollingIntervalSeconds: 5
+    tokenRefreshBeforeSeconds: 300
+    receiveAdBalloons: false
+    receiveVideoBalloons: false
+
+logging:
+  debug: false
+  maskSensitiveValues: true

@@ -1,0 +1,35 @@
+items:
+  donation_diamond:
+    material: "DIAMOND"
+    amount: 1
+    name: "&b후원 다이아몬드"
+    lore:
+      - "&7후원자: {donator}"
+      - "&7금액: {amount}"
+    glow: true
+    persistentData:
+      - key: "mcstreamapi:item_id"
+        type: "string"
+        value: "donation_diamond"
+      - key: "mcstreamapi:donation_amount"
+        type: "long"
+        value: 1000
+
+  rare_emerald:
+    material: "EMERALD"
+    amount: "<1..3>"
+    name: "&a희귀 에메랄드"
+    enchantments:
+      minecraft:unbreaking: 1
+    itemFlags:
+      - "HIDE_ENCHANTS"
+
+  donor_head:
+    material: "PLAYER_HEAD"
+    amount: 1
+    name: "&e{donator}님의 후원 머리"
+    playerHead: "{donator}"
+    persistentData:
+      - key: "mcstreamapi:special"
+        type: "boolean"
+        value: true

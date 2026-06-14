@@ -1,0 +1,47 @@
+rewards:
+  chzzk:
+    - id: "chzzk_1000"
+      amount: "1000"
+      chance: 100
+      actions:
+        - type: "broadcast"
+          message: "&a{donator}님이 {streamer}에게 {amount}원을 후원했습니다."
+        - type: "give"
+          target: "@s"
+          material: "APPLE"
+          amount: 1
+        - type: "custom-give"
+          target: "@s"
+          item: "{item.donation_diamond}"
+
+    - id: "chzzk_monster"
+      amount: "5000+"
+      chance: 70
+      actions:
+        - type: "summon"
+          entity: "{random.monster_random}"
+        - type: "sound"
+          sound: "minecraft:entity.player.levelup"
+          source: "master"
+          volume: 1.0
+          pitch: 1.0
+
+    - id: "chzzk_rare_bonus"
+      amount: "5000+"
+      chance: 30
+      actions:
+        - type: "give"
+          target: "@s"
+          material: "EMERALD"
+          amount: 1
+        - type: "custom-give"
+          target: "@s"
+          item: "{item.rare_emerald}"
+
+  soop:
+    - id: "soop_1000"
+      amount: "1000"
+      chance: 100
+      actions:
+        - type: "broadcast"
+          message: "&b{donator}님이 SOOP에서 {amount}원을 후원했습니다."

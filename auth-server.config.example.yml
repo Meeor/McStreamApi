@@ -1,0 +1,59 @@
+server:
+  host: "127.0.0.1"
+  port: 18080
+  publicBaseUrl: "https://auth.example.com/mca"
+  allowInsecureLocalhost: false
+
+security:
+  sharedSecret: "CHANGE_ME_RANDOM_LONG_SECRET"
+  pairingExpireSeconds: 600
+  stateExpireSeconds: 600
+  enableRateLimit: true
+  trustedProxyHeaders: true
+
+http:
+  requestTimeoutSeconds: 15
+  shutdownTimeoutSeconds: 10
+
+cleanup:
+  intervalSeconds: 60
+  expiredSessionRetainSeconds: 300
+  consumedSessionRetainSeconds: 60
+  failedSessionRetainSeconds: 600
+
+rateLimit:
+  apiPairingCreatePerMinute: 10
+  apiPairingPollPerMinute: 30
+  oauthStartPerMinute: 30
+  oauthCallbackPerMinute: 30
+
+platforms:
+  chzzk:
+    enabled: true
+    clientId: "CHZZK_CLIENT_ID"
+    clientSecret: "CHZZK_CLIENT_SECRET"
+    redirectUri: "https://auth.example.com/mca/oauth/chzzk/callback"
+    scopes:
+      - "user:read"
+    oauth:
+      authorizeEndpoint: "https://chzzk.naver.com/account-interlock"
+      tokenEndpoint: "https://openapi.chzzk.naver.com/auth/v1/token"
+      refreshEndpoint: "https://openapi.chzzk.naver.com/auth/v1/token"
+      channelInfoEndpoint: "https://openapi.chzzk.naver.com/open/v1/users/me"
+
+  soop:
+    enabled: true
+    clientId: "SOOP_CLIENT_ID"
+    clientSecret: "SOOP_CLIENT_SECRET"
+    redirectUri: "https://auth.example.com/mca/oauth/soop/callback"
+    scopes:
+      - "api"
+    oauth:
+      authorizeEndpoint: "https://openapi.sooplive.com/auth/code"
+      tokenEndpoint: "https://openapi.sooplive.com/auth/token"
+      refreshEndpoint: "https://openapi.sooplive.com/auth/token"
+      channelInfoEndpoint: "https://openapi.sooplive.com/user/stationinfo"
+
+logging:
+  level: "INFO"
+  maskSensitiveValues: true

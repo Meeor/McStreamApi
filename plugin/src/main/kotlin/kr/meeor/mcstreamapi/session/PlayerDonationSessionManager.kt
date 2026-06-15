@@ -8,7 +8,7 @@ import kr.meeor.mcstreamapi.token.TokenStore
 
 class PlayerDonationSessionManager(
     private val tokenStore: TokenStore,
-    private val providers: Map<String, DonationProvider>,
+    private var providers: Map<String, DonationProvider>,
     private val onlinePlayers: OnlinePlayerRegistry,
     private val rewardPipeline: DonationRewardPipeline,
     private val logger: PluginLogger? = null,
@@ -50,6 +50,11 @@ class PlayerDonationSessionManager(
 
     fun stopAll() {
         sessions.keys.toList().forEach(::playerQuit)
+    }
+
+    fun replaceProviders(providers: Map<String, DonationProvider>) {
+        stopAll()
+        this.providers = providers
     }
 
     fun activeSessions(): List<ActiveDonationSession> {
@@ -99,11 +104,24 @@ class PlayerDonationSessionManager(
                 token = token,
             ) { event ->
                 if (!onlinePlayers.isOnline(playerUuid)) {
+                    logger?.debug(
+                        "§e[대기] 후원 이벤트 무시: 플레이어=$playerName 플랫폼=$platform " +
+                            "후원자=${event.donatorName} 수량=${event.amount} 원인=오프라인",
+                    )
                     return@startSession
                 }
-                if (deduplicator.accept(event)) {
-                    rewardPipeline.handle(playerUuid, event)
+                if (!deduplicator.accept(event)) {
+                    logger?.debug(
+                        "§e[대기] 후원 이벤트 중복 무시: 플레이어=$playerName 플랫폼=$platform " +
+                            "eventId=${event.eventId}",
+                    )
+                    return@startSession
                 }
+                logger?.info(
+                    "§a[후원] 이벤트 수신: 플레이어=$playerName 플랫폼=$platform " +
+                        "후원자=${event.donatorName} 수량=${event.amount}",
+                )
+                rewardPipeline.handle(playerUuid, event)
             }
         }.getOrElse { throwable ->
             logger?.warning(

@@ -1,9 +1,12 @@
 package kr.meeor.mcstreamapi.donation.chzzk
 
+import kr.meeor.mcstreamapi.logging.PluginLogger
 import java.net.URI
+import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.StandardCharsets
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -14,6 +17,7 @@ import kotlinx.serialization.json.jsonObject
 class ChzzkSessionApi(
     private val baseUrl: String = DEFAULT_BASE_URL,
     private val httpClient: HttpClient = HttpClient.newHttpClient(),
+    private val logger: PluginLogger? = null,
 ) {
     fun createUserSession(accessToken: String): Result<String> {
         return send(
@@ -28,11 +32,12 @@ class ChzzkSessionApi(
     }
 
     fun subscribeDonation(accessToken: String, sessionKey: String): Result<Unit> {
+        val encodedSessionKey = URLEncoder.encode(sessionKey, StandardCharsets.UTF_8)
         return send(
             method = "POST",
-            path = "/open/v1/sessions/events/subscribe/donation",
+            path = "/open/v1/sessions/events/subscribe/donation?sessionKey=$encodedSessionKey",
             accessToken = accessToken,
-            body = """{"sessionKey":"$sessionKey"}""",
+            body = null,
         ).map { }
     }
 
@@ -54,8 +59,16 @@ class ChzzkSessionApi(
             }
             val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
             if (response.statusCode() !in 200..299) {
+                logger?.warning(
+                    "§c[실패] CHZZK Session API 응답 실패: method=$method path=$path " +
+                        "status=${response.statusCode()} body=${response.body().previewValue()}",
+                )
                 throw ChzzkDonationProviderException(mapStatus(response.statusCode()))
             }
+            logger?.debug(
+                "§e[수신] CHZZK Session API 응답: method=$method path=$path " +
+                    "status=${response.statusCode()} body=${response.body().previewValue()}",
+            )
             response.body()
         }.recoverCatching { throwable ->
             if (throwable is ChzzkDonationProviderException) {
@@ -82,5 +95,14 @@ class ChzzkSessionApi(
 
     companion object {
         private const val DEFAULT_BASE_URL = "https://openapi.chzzk.naver.com"
+    }
+}
+
+private fun String.previewValue(maxLength: Int = 240): String {
+    val normalized = replace(Regex("\\s+"), " ")
+    return if (normalized.length <= maxLength) {
+        normalized
+    } else {
+        normalized.take(maxLength) + "..."
     }
 }

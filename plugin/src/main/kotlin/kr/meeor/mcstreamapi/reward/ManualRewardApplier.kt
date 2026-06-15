@@ -27,11 +27,11 @@ class ManualRewardApplier(
             }
     }
 
-    fun apply(playerName: String, amount: Long): ManualRewardApplyResult {
+    fun apply(playerName: String, amount: Long, platform: String? = null): ManualRewardApplyResult {
         return applyReward(
             playerName = playerName,
             streamerName = playerName,
-            platformFilter = null,
+            platformFilter = platform,
             donatorName = "manual",
             amount = amount,
             message = "manual apply",
@@ -79,7 +79,15 @@ class ManualRewardApplier(
                     "REWARD_DISABLED platform=$platform rewardId=${disabled.id} reason=${disabled.reason}",
                 )
             }
-            val reward = rewardMatcher.match(parsedRewards.rewards, amount) ?: continue
+            val reward = rewardMatcher.match(parsedRewards.rewards, amount)
+            if (reward == null) {
+                logger?.debug(
+                    "§e[대기] 후원 reward 매칭 실패: platform=$platform player=$playerName " +
+                        "donator=$donatorName amount=$amount rewards=${parsedRewards.rewards.size} " +
+                        "rules=${parsedRewards.rewards.joinToString(",") { it.amountRule.describe() }.ifBlank { "none" }}",
+                )
+                continue
+            }
             val parsedActions = actionParser.parse(reward.actions)
             parsedActions.disabledActions.forEach { disabled ->
                 logger?.warning(
@@ -120,6 +128,14 @@ class ManualRewardApplier(
         }
 
         return ManualRewardApplyResult.Failure("금액 ${amount}에 맞는 reward가 없습니다.")
+    }
+
+    private fun AmountRule.describe(): String {
+        return when (this) {
+            is AmountRule.Exact -> amount.toString()
+            is AmountRule.Range -> "$minimum-$maximum"
+            is AmountRule.Plus -> "$minimum+"
+        }
     }
 }
 

@@ -11,6 +11,7 @@ import kr.meeor.mcstreamapi.logging.PluginLogger
 import kr.meeor.mcstreamapi.auth.PairingConnector
 import kr.meeor.mcstreamapi.donation.DonationProvider
 import kr.meeor.mcstreamapi.donation.chzzk.ChzzkDonationProvider
+import kr.meeor.mcstreamapi.donation.chzzk.ChzzkSessionApi
 import kr.meeor.mcstreamapi.donation.chzzk.ChzzkTokenRefresher
 import kr.meeor.mcstreamapi.donation.chzzk.JavaChzzkSessionTransport
 import kr.meeor.mcstreamapi.donation.soop.JavaSoopSessionTransport
@@ -63,10 +64,7 @@ class McStreamApiPlugin : JavaPlugin() {
     }
 
     private fun registerCommands(bootstrap: PluginConfigBootstrap) {
-        val tokenStore = TokenStore(
-            tokensDirectory = dataFolder.toPath().resolve("tokens"),
-            secretKeyPath = dataFolder.toPath().resolve("secret.key"),
-        )
+        val tokenStore = createTokenStore()
         val pairingConnector = PairingConnector(
             tokenStore = tokenStore,
             scheduler = BukkitPairingScheduler(this),
@@ -80,9 +78,7 @@ class McStreamApiPlugin : JavaPlugin() {
         this.manualRewardApplier = manualRewardApplier
         val commandService = McaCommandService(
             runtimeStateProvider = { runtimeState },
-            reloadRuntimeState = {
-                bootstrap.initialize().also { runtimeState = it }
-            },
+            reloadRuntimeState = { reloadRuntime(bootstrap) },
             pairingConnector = pairingConnector,
             manualRewardApplier = manualRewardApplier,
             connectedPlayerNames = {
@@ -120,10 +116,7 @@ class McStreamApiPlugin : JavaPlugin() {
     }
 
     private fun registerSessionListener() {
-        val tokenStore = TokenStore(
-            tokensDirectory = dataFolder.toPath().resolve("tokens"),
-            secretKeyPath = dataFolder.toPath().resolve("secret.key"),
-        )
+        val tokenStore = createTokenStore()
         sessionManager = PlayerDonationSessionManager(
             tokenStore = tokenStore,
             providers = createDonationProviders(tokenStore),
@@ -146,6 +139,16 @@ class McStreamApiPlugin : JavaPlugin() {
         }
     }
 
+    private fun reloadRuntime(bootstrap: PluginConfigBootstrap): PluginRuntimeState {
+        val state = bootstrap.initialize()
+        runtimeState = state
+        sessionManager?.replaceProviders(createDonationProviders(createTokenStore()))
+        server.onlinePlayers.forEach { player ->
+            sessionManager?.playerJoined(player.uniqueId.toString(), player.name)
+        }
+        return state
+    }
+
     private fun createDonationProviders(tokenStore: TokenStore): Map<String, DonationProvider> {
         val state = runtimeState ?: return emptyMap()
         val providers = mutableMapOf<String, DonationProvider>()
@@ -158,7 +161,8 @@ class McStreamApiPlugin : JavaPlugin() {
                     refreshBeforeSeconds = chzzkConfig.tokenRefreshBeforeSeconds,
                 ),
                 tokenStore = tokenStore,
-                sessionTransport = JavaChzzkSessionTransport(),
+                sessionApi = ChzzkSessionApi(logger = pluginLogger),
+                sessionTransport = JavaChzzkSessionTransport(logger = pluginLogger),
                 logger = pluginLogger,
             )
         }
@@ -182,6 +186,13 @@ class McStreamApiPlugin : JavaPlugin() {
             )
         }
         return providers
+    }
+
+    private fun createTokenStore(): TokenStore {
+        return TokenStore(
+            tokensDirectory = dataFolder.toPath().resolve("tokens"),
+            secretKeyPath = dataFolder.toPath().resolve("secret.key"),
+        )
     }
 
     private fun createConfigBootstrap(): PluginConfigBootstrap {

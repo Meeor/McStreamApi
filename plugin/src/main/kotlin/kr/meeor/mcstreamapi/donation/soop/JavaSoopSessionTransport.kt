@@ -170,11 +170,16 @@ private class JavaSoopSession(
         private val room: SoopChatRoom,
     ) : WebSocket.Listener {
         private val binaryMessage = mutableListOf<ByteBuffer>()
+        private val loginTokens = listOf(
+            SoopLoginToken(label = "chatinfo-key", value = room.ticket),
+            SoopLoginToken(label = "oauth-access-token", value = accessToken),
+        ).distinctBy { it.value }
+
+        private var loginTokenIndex = 0
 
         override fun onOpen(webSocket: WebSocket) {
             this@JavaSoopSession.webSocket = webSocket
-            logger?.debug("§e[진행] SOOP 세션 로그인 요청 중: 플레이어=$playerName 채널=${room.bjNickname}")
-            webSocket.sendBinary(SoopPacketCodec.encode(SVC_SDK_LOGIN, listOf(room.ticket, GUEST_FLAG.toString())), true)
+            sendLogin(webSocket)
             webSocket.request(1)
         }
 
@@ -212,11 +217,26 @@ private class JavaSoopSession(
         }
 
         private fun handlePacket(packet: SoopPacket) {
-            if (packet.retCode < 0) {
+            logger?.debug(
+                "§e[수신] SOOP 패킷 수신: 플레이어=$playerName 채널=${room.bjNickname} " +
+                    "serviceCode=${packet.serviceCode} retCode=${packet.retCode} fields=${packet.fields.size} " +
+                    "preview=${packet.previewFields()}",
+            )
+            if (packet.retCode != 0) {
+                if (packet.serviceCode == SVC_SDK_LOGIN && tryNextLoginToken()) {
+                    return
+                }
+                logger?.warning(
+                    "§c[실패] SOOP 패킷 오류 응답: 플레이어=$playerName 채널=${room.bjNickname} " +
+                        "serviceCode=${packet.serviceCode} retCode=${packet.retCode} preview=${packet.previewFields()}",
+                )
+                if (packet.serviceCode == SVC_SDK_LOGIN) {
+                    scheduleReconnect(attempt + 1, "login:${packet.retCode}")
+                }
                 return
             }
             when (packet.serviceCode) {
-                SVC_SDK_LOGIN -> {
+                SVC_LOGIN, SVC_SDK_LOGIN -> {
                     logger?.debug("§e[진행] SOOP 채팅방 join 요청 중: 플레이어=$playerName 채널=${room.bjNickname}")
                     webSocket?.sendBinary(SoopPacketCodec.encode(SVC_JOINCH, joinFields(room)), true)
                     CompletableFuture.delayedExecutor(KEEPALIVE_SECONDS, TimeUnit.SECONDS).execute {
@@ -240,8 +260,54 @@ private class JavaSoopSession(
                 }
                 SVC_VIDEO_BALLOON -> if (receiveVideoBalloons) {
                     donationFrom(packet, bjId = packet.field(1), userId = packet.field(2), nickname = packet.field(3), count = packet.long(4))
+                } else {
+                    logger?.debug("§e[대기] SOOP 영상풍 패킷 무시: 플레이어=$playerName 채널=${room.bjNickname} 원인=receiveVideoBalloons=false")
                 }
+                else -> handleUnknownPacket(packet)
             }
+        }
+
+        private fun handleUnknownPacket(packet: SoopPacket) {
+            val amountCandidates = packet.amountCandidates()
+            if (amountCandidates.isNotEmpty()) {
+                logger?.warning(
+                    "§e[후보] SOOP 금액 후보 패킷: 플레이어=$playerName 채널=${room.bjNickname} " +
+                        "serviceCode=${packet.serviceCode} candidates=${amountCandidates.joinToString(",")} " +
+                        "preview=${packet.previewFields(limit = 14)}",
+                )
+                return
+            }
+
+            logger?.debug(
+                "§e[대기] SOOP 미처리 패킷: 플레이어=$playerName 채널=${room.bjNickname} " +
+                    "serviceCode=${packet.serviceCode} fields=${packet.fields.size} preview=${packet.previewFields()}",
+            )
+        }
+
+        private fun sendLogin(webSocket: WebSocket) {
+            val loginToken = loginTokens.getOrNull(loginTokenIndex) ?: return
+            logger?.debug(
+                "§e[진행] SOOP 세션 로그인 요청 중: 플레이어=$playerName 채널=${room.bjNickname} " +
+                    "tokenSource=${loginToken.label}",
+            )
+            webSocket.sendBinary(SoopPacketCodec.encode(SVC_SDK_LOGIN, listOf(loginToken.value, GUEST_FLAG.toString())), true)
+        }
+
+        private fun tryNextLoginToken(): Boolean {
+            val failed = loginTokens.getOrNull(loginTokenIndex)?.label ?: "unknown"
+            loginTokenIndex += 1
+            val socket = webSocket
+            val next = loginTokens.getOrNull(loginTokenIndex)
+            if (socket == null || next == null) {
+                return false
+            }
+
+            logger?.warning(
+                "§e[대기] SOOP 로그인 토큰 거부: 플레이어=$playerName 채널=${room.bjNickname} " +
+                    "tokenSource=$failed 다음시도=${next.label}",
+            )
+            sendLogin(socket)
+            return true
         }
 
         private fun joinFields(room: SoopChatRoom): List<String> {
@@ -266,8 +332,16 @@ private class JavaSoopSession(
 
         private fun donationFrom(packet: SoopPacket, bjId: String?, userId: String?, nickname: String?, count: Long?) {
             if (count == null || count <= 0) {
+                logger?.debug(
+                    "§e[대기] SOOP 별풍 패킷 무시: 플레이어=$playerName 채널=${room.bjNickname} " +
+                        "serviceCode=${packet.serviceCode} 원인=INVALID_COUNT",
+                )
                 return
             }
+            logger?.info(
+                "§a[후원] SOOP 별풍 감지: 플레이어=$playerName 채널=${room.bjNickname} " +
+                    "후원자=${nickname ?: userId ?: "unknown"} 수량=$count serviceCode=${packet.serviceCode}",
+            )
             listener(
                 SoopDonationDto(
                     eventId = "soop:${packet.serviceCode}:${packet.fields.joinToString("|").sha256Short()}",
@@ -284,6 +358,7 @@ private class JavaSoopSession(
 
     companion object {
         private const val SVC_KEEPALIVE = 0
+        private const val SVC_LOGIN = 1
         private const val SVC_JOINCH = 2
         private const val SVC_SDK_LOGIN = 16
         private const val SVC_SENDBALLOON = 18
@@ -315,6 +390,41 @@ private data class SoopPacket(
     fun field(index: Int): String? = fields.getOrNull(index)?.takeIf { it.isNotBlank() }
 
     fun long(index: Int): Long? = field(index)?.toLongOrNull()
+
+    fun amountCandidates(): List<String> {
+        return fields.mapIndexedNotNull { index, value ->
+            val number = value.toLongOrNull() ?: return@mapIndexedNotNull null
+            if (number in 1..1_000_000) {
+                "$index=$number"
+            } else {
+                null
+            }
+        }
+    }
+
+    fun previewFields(limit: Int = 8): String {
+        if (fields.isEmpty()) {
+            return "[]"
+        }
+        return fields
+            .take(limit)
+            .mapIndexed { index, value -> "$index=${value.previewValue()}" }
+            .joinToString(prefix = "[", postfix = if (fields.size > limit) ",...]" else "]")
+    }
+}
+
+private data class SoopLoginToken(
+    val label: String,
+    val value: String,
+)
+
+private fun String.previewValue(maxLength: Int = 48): String {
+    val normalized = replace(Regex("\\s+"), " ")
+    return if (normalized.length <= maxLength) {
+        normalized
+    } else {
+        normalized.take(maxLength) + "..."
+    }
 }
 
 private object SoopPacketCodec {

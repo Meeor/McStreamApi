@@ -18,7 +18,7 @@ class ChzzkSessionApiTest {
             exchange.responseBody.use { it.write(body.toByteArray()) }
         }
         server.createContext("/open/v1/sessions/events/subscribe/donation") { exchange ->
-            requests.add("${exchange.requestMethod} ${exchange.requestURI.path} ${exchange.requestHeaders.getFirst("Authorization")}")
+            requests.add("${exchange.requestMethod} ${exchange.requestURI.rawPath}?${exchange.requestURI.rawQuery} ${exchange.requestHeaders.getFirst("Authorization")}")
             exchange.sendResponseHeaders(204, -1)
         }
         server.start()
@@ -31,7 +31,7 @@ class ChzzkSessionApiTest {
 
             assertEquals("https://ssio.example.com?auth=token", url)
             assertTrue(requests.contains("GET /open/v1/sessions/auth Bearer access-token"))
-            assertTrue(requests.contains("POST /open/v1/sessions/events/subscribe/donation Bearer access-token"))
+            assertTrue(requests.contains("POST /open/v1/sessions/events/subscribe/donation?sessionKey=session-key Bearer access-token"))
         } finally {
             server.stop(0)
         }

@@ -57,6 +57,14 @@ class McaCommandService(
                 }
                 else -> emptyList()
             }
+            4 -> when (args[0].lowercase()) {
+                "apply" -> if (sender.canUse(PERMISSION_APPLY)) {
+                    SUPPORTED_PLATFORMS.matching(args[3])
+                } else {
+                    emptyList()
+                }
+                else -> emptyList()
+            }
             else -> emptyList()
         }
     }
@@ -120,7 +128,7 @@ class McaCommandService(
         }
 
         if (args.size < 2) {
-            return McaCommandResult("사용법: /mca apply <player> <amount>")
+            return McaCommandResult("사용법: /mca apply <player> <amount> [chzzk|soop]")
         }
 
         val amount = args[1].toLongOrNull()
@@ -128,10 +136,18 @@ class McaCommandService(
             return McaCommandResult("amount는 1 이상의 숫자여야 합니다.")
         }
 
+        val platform = resolveApplyPlatform(args[0], args.getOrNull(2))
+            ?: return McaCommandResult("연결된 플랫폼을 확인할 수 없습니다. 테스트 적용은 /mca apply <player> <amount> <chzzk|soop> 형식으로 플랫폼을 지정해주세요.")
+        if (platform == APPLY_PLATFORM_AMBIGUOUS) {
+            return McaCommandResult("여러 플랫폼이 연결되어 있습니다. 사용법: /mca apply <player> <amount> <chzzk|soop>")
+        }
+        if (platform == APPLY_PLATFORM_UNSUPPORTED) {
+            return McaCommandResult("지원하지 않는 플랫폼입니다. 사용 가능: chzzk, soop")
+        }
         val applier = manualRewardApplier
             ?: return McaCommandResult("수동 보상 적용 기능이 아직 준비되지 않았습니다.")
 
-        return when (val result = applier.apply(args[0], amount)) {
+        return when (val result = applier.apply(args[0], amount, platform)) {
             is ManualRewardApplyResult.Success -> McaCommandResult(
                 listOf(
                     "§8§m--------------------",
@@ -247,6 +263,34 @@ class McaCommandService(
         return McaCommandResult(lines.joinToString("\n"))
     }
 
+    private fun resolveApplyPlatform(playerQuery: String, requestedPlatform: String?): String? {
+        val normalizedRequested = requestedPlatform?.lowercase()
+        if (normalizedRequested != null && normalizedRequested !in SUPPORTED_PLATFORMS) {
+            return APPLY_PLATFORM_UNSUPPORTED
+        }
+        if (normalizedRequested != null) {
+            return normalizedRequested
+        }
+
+        val platforms = connectedPlatformsFor(playerQuery)
+        return when (platforms.size) {
+            0 -> null
+            1 -> platforms.single()
+            else -> APPLY_PLATFORM_AMBIGUOUS
+        }
+    }
+
+    private fun connectedPlatformsFor(playerQuery: String): List<String> {
+        return connectedTokens()
+            .filter { token ->
+                token.minecraftPlayerName.equals(playerQuery, ignoreCase = true) ||
+                    token.minecraftUuid.equals(playerQuery, ignoreCase = true)
+            }
+            .map { it.platform }
+            .distinct()
+            .sorted()
+    }
+
     private fun subcommandsFor(sender: McaCommandSender): List<String> {
         val commands = mutableListOf("connect")
         if (sender.canUse(PERMISSION_RELOAD)) {
@@ -296,7 +340,9 @@ class McaCommandService(
         const val PERMISSION_STATUS = "mcstreamapi.status"
 
         private val SUPPORTED_PLATFORMS = listOf("chzzk", "soop")
-        private const val HELP_MESSAGE = "사용법: /mca connect <platform> | reload | apply <player> <amount> | status"
+        private const val HELP_MESSAGE = "사용법: /mca connect <platform> | reload | apply <player> <amount> [platform] | status"
         private const val TOKEN_EXPIRING_SOON_SECONDS = 300L
+        private const val APPLY_PLATFORM_AMBIGUOUS = "__ambiguous__"
+        private const val APPLY_PLATFORM_UNSUPPORTED = "__unsupported__"
     }
 }

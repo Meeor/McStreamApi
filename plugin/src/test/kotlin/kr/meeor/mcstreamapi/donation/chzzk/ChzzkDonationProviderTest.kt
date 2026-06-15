@@ -25,7 +25,7 @@ class ChzzkDonationProviderTest {
             exchange.responseBody.use { it.write(body.toByteArray()) }
         }
         server.createContext("/open/v1/sessions/events/subscribe/donation") { exchange ->
-            requests.add(exchange.requestURI.path)
+            requests.add("${exchange.requestURI.rawPath}?${exchange.requestURI.rawQuery}")
             exchange.sendResponseHeaders(204, -1)
         }
         server.start()
@@ -69,7 +69,7 @@ class ChzzkDonationProviderTest {
             assertEquals(
                 listOf(
                     "/open/v1/sessions/auth",
-                    "/open/v1/sessions/events/subscribe/donation",
+                    "/open/v1/sessions/events/subscribe/donation?sessionKey=session-key",
                 ),
                 requests,
             )

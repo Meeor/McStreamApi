@@ -1,6 +1,7 @@
 package kr.meeor.mcstreamapi.donation.chzzk
 
 import kr.meeor.mcstreamapi.donation.ProviderReconnectPolicy
+import kr.meeor.mcstreamapi.logging.PluginLogger
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -19,13 +20,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class JavaChzzkSessionTransport(
     private val httpClient: HttpClient = HttpClient.newHttpClient(),
+    private val logger: PluginLogger? = null,
 ) : ChzzkSessionTransport {
     override fun open(
         sessionUrl: String,
         reconnectPolicy: ProviderReconnectPolicy,
         handler: ChzzkSessionHandler,
     ): ChzzkSession {
-        val session = JavaChzzkSession(sessionUrl, reconnectPolicy, handler, httpClient)
+        val session = JavaChzzkSession(sessionUrl, reconnectPolicy, handler, httpClient, logger)
         session.connect(attempt = 1)
         return session
     }
@@ -36,6 +38,7 @@ private class JavaChzzkSession(
     private val reconnectPolicy: ProviderReconnectPolicy,
     private val handler: ChzzkSessionHandler,
     private val httpClient: HttpClient,
+    private val logger: PluginLogger?,
 ) : ChzzkSession {
     private val stopped = AtomicBoolean(false)
     @Volatile
@@ -116,11 +119,14 @@ private class JavaChzzkSession(
     }
 
     private fun handleMessage(payload: String, webSocket: WebSocket? = null) {
+        logger?.debug("§e[수신] CHZZK WebSocket payload 수신: preview=${payload.previewValue()}")
         if (payload == ENGINE_IO_PING) {
+            logger?.debug("§e[진행] CHZZK Engine.IO ping 수신: pong 응답")
             webSocket?.sendText(ENGINE_IO_PONG, true)
             return
         }
         if (payload.startsWith(ENGINE_IO_OPEN_PREFIX)) {
+            logger?.debug("§e[진행] CHZZK Engine.IO open 수신: Socket.IO connect 요청")
             webSocket?.sendText(SOCKET_IO_CONNECT, true)
             return
         }
@@ -128,23 +134,45 @@ private class JavaChzzkSession(
             handleSocketIoEvent(payload.removePrefix(SOCKET_IO_EVENT_PREFIX))
             return
         }
-        val root = runCatching { Json.parseToJsonElement(payload).jsonObject }.getOrNull() ?: return
+        val root = runCatching { Json.parseToJsonElement(payload).jsonObject }.getOrNull() ?: run {
+            logger?.debug("§e[대기] CHZZK 미처리 payload: 원인=JSON_PARSE_FAILED preview=${payload.previewValue()}")
+            return
+        }
         handleJsonMessage(root)
     }
 
     private fun handleSocketIoEvent(payload: String) {
-        val event = runCatching { Json.parseToJsonElement(payload) as? JsonArray }.getOrNull() ?: return
-        val eventType = (event.getOrNull(0) as? JsonPrimitive)?.contentOrNull ?: return
-        val body = event.getOrNull(1) as? JsonObject ?: return
+        val event = runCatching { Json.parseToJsonElement(payload) as? JsonArray }.getOrNull() ?: run {
+            logger?.debug("§e[대기] CHZZK Socket.IO 이벤트 무시: 원인=JSON_ARRAY_PARSE_FAILED preview=${payload.previewValue()}")
+            return
+        }
+        val eventType = (event.getOrNull(0) as? JsonPrimitive)?.contentOrNull ?: run {
+            logger?.debug("§e[대기] CHZZK Socket.IO 이벤트 무시: 원인=EVENT_TYPE_MISSING preview=${payload.previewValue()}")
+            return
+        }
+        val body = event.getOrNull(1)?.asObjectPayload() ?: run {
+            logger?.debug("§e[대기] CHZZK Socket.IO 이벤트 무시: eventType=$eventType 원인=BODY_MISSING preview=${payload.previewValue()}")
+            return
+        }
+        logger?.debug(
+            "§e[수신] CHZZK Socket.IO 이벤트 수신: eventType=$eventType keys=${body.keys.joinToString(",")} " +
+                "preview=${body.previewJson()}",
+        )
         when (eventType) {
             "SYSTEM" -> handleSystemMessage(body)
-            "DONATION" -> handleDonationMessage(body)
+            "DONATION" -> if (!handleDonationMessage(body)) {
+                handleUnknownEvent(eventType, body)
+            }
+            else -> handleUnknownEvent(eventType, body)
         }
     }
 
     private fun handleJsonMessage(root: JsonObject) {
+        logger?.debug("§e[수신] CHZZK JSON payload 수신: keys=${root.keys.joinToString(",")} preview=${root.previewJson()}")
         handleSystemMessage(root)
-        handleDonationMessage(root)
+        if (!handleDonationMessage(root)) {
+            handleUnknownEvent("JSON", root)
+        }
     }
 
     private fun handleSystemMessage(root: JsonObject) {
@@ -154,20 +182,48 @@ private class JavaChzzkSession(
         }
     }
 
-    private fun handleDonationMessage(root: JsonObject) {
-        findDonationObject(root)?.let { donation ->
-            handler.onDonation(
-                ChzzkDonationDto(
-                    donationType = findString(donation, "donationType"),
-                    channelId = findString(donation, "channelId") ?: return,
-                    donatorChannelId = findString(donation, "donatorChannelId"),
-                    donatorNickname = findString(donation, "donatorNickname") ?: findString(donation, "nickname") ?: "unknown",
-                    payAmount = findLong(donation, "payAmount") ?: findLong(donation, "amount") ?: return,
-                    donationText = findString(donation, "donationText") ?: findString(donation, "message"),
-                    messageTime = findLong(donation, "messageTime") ?: findLong(donation, "timestamp"),
-                ),
+    private fun handleDonationMessage(root: JsonObject): Boolean {
+        val donation = findDonationObject(root) ?: return false
+        val channelId = findString(donation, "channelId")
+        val amount = findLong(donation, "payAmount") ?: findLong(donation, "amount")
+        if (channelId == null || amount == null) {
+            logger?.warning(
+                "§e[후보] CHZZK 후원 후보 payload: channelId=${channelId ?: "missing"} amount=${amount ?: "missing"} " +
+                    "keys=${donation.keys.joinToString(",")} preview=${donation.previewJson()}",
             )
+            return false
         }
+
+        val donatorName = findString(donation, "donatorNickname") ?: findString(donation, "nickname") ?: "unknown"
+        logger?.info("§a[후원] CHZZK 후원 감지: 후원자=$donatorName 금액=$amount")
+        handler.onDonation(
+            ChzzkDonationDto(
+                donationType = findString(donation, "donationType"),
+                channelId = channelId,
+                donatorChannelId = findString(donation, "donatorChannelId"),
+                donatorNickname = donatorName,
+                payAmount = amount,
+                donationText = findString(donation, "donationText") ?: findString(donation, "message"),
+                messageTime = findLong(donation, "messageTime") ?: findLong(donation, "timestamp"),
+            ),
+        )
+        return true
+    }
+
+    private fun handleUnknownEvent(eventType: String, body: JsonObject) {
+        val amountCandidates = body.amountCandidates()
+        if (amountCandidates.isNotEmpty()) {
+            logger?.warning(
+                "§e[후보] CHZZK 금액 후보 이벤트: eventType=$eventType candidates=${amountCandidates.joinToString(",")} " +
+                    "keys=${body.keys.joinToString(",")} preview=${body.previewJson()}",
+            )
+            return
+        }
+
+        logger?.debug(
+            "§e[대기] CHZZK 미처리 이벤트: eventType=$eventType keys=${body.keys.joinToString(",")} " +
+                "preview=${body.previewJson()}",
+        )
     }
 
     private fun findDonationObject(element: JsonElement): JsonObject? {
@@ -291,4 +347,47 @@ private fun Throwable.rootCause(): Throwable {
         current = current.cause!!
     }
     return current
+}
+
+private fun JsonObject.previewJson(maxLength: Int = 320): String {
+    return toString().previewValue(maxLength)
+}
+
+private fun JsonElement.asObjectPayload(): JsonObject? {
+    (this as? JsonObject)?.let { return it }
+    val content = (this as? JsonPrimitive)?.contentOrNull ?: return null
+    return runCatching { Json.parseToJsonElement(content).jsonObject }.getOrNull()
+}
+
+private fun String.previewValue(maxLength: Int = 320): String {
+    val normalized = replace(Regex("\\s+"), " ")
+    return if (normalized.length <= maxLength) {
+        normalized
+    } else {
+        normalized.take(maxLength) + "..."
+    }
+}
+
+private fun JsonObject.amountCandidates(): List<String> {
+    val candidates = mutableListOf<String>()
+    collectAmountCandidates(prefix = "", element = this, candidates = candidates)
+    return candidates.take(12)
+}
+
+private fun collectAmountCandidates(prefix: String, element: JsonElement, candidates: MutableList<String>) {
+    when (element) {
+        is JsonObject -> element.forEach { (key, value) ->
+            val path = if (prefix.isBlank()) key else "$prefix.$key"
+            collectAmountCandidates(path, value, candidates)
+        }
+        is JsonArray -> element.forEachIndexed { index, value ->
+            collectAmountCandidates("$prefix[$index]", value, candidates)
+        }
+        is JsonPrimitive -> {
+            val number = element.longOrNull ?: element.contentOrNull?.toLongOrNull() ?: return
+            if (number in 1..100_000_000) {
+                candidates.add("$prefix=$number")
+            }
+        }
+    }
 }

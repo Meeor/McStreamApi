@@ -5,7 +5,7 @@ class LogMasker {
         var masked = value
         SENSITIVE_KEYS.forEach { key ->
             masked = masked.replace(
-                Regex("(?i)($key\\s*[:=]\\s*)([^\\s,&}]+)"),
+                Regex("(?i)((?<![A-Za-z0-9_])${Regex.escape(key)}\\s*[:=]\\s*)([^\\s,&}]+)"),
                 "$1****",
             )
         }

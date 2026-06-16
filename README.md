@@ -2,7 +2,7 @@
 
 McStreamApi는 Chzzk/SOOP OAuth 계정 연결을 통해 Minecraft 플레이어와 스트리머 계정을 연결하고, 후원 이벤트가 들어오면 Paper/Spigot 서버에서 보상을 실행하는 플러그인입니다.
 
-현재 Chzzk OAuth 연결과 Chzzk 후원 세션 구조는 구현되어 있습니다. SOOP 후원 이벤트 세션은 공식 후원 이벤트 API 확인 전까지 보류 상태입니다.
+현재 Chzzk와 SOOP OAuth 연결, 후원 이벤트 세션, 보상 매칭/실행이 구현되어 있습니다.
 
 ## 구성
 
@@ -19,8 +19,8 @@ AuthServer는 외부 HTTPS URL을 받고, 내부에서는 `127.0.0.1:<port>`로�
 
 | 플랫폼 | OAuth 연결 | 후원 이벤트 | 비고 |
 | --- | --- | --- | --- |
-| Chzzk | 구현됨 | 구현됨 | 실제 후원 이벤트 수신은 스트리머 계정에서 최종 확인 필요 |
-| SOOP | 구현됨 | 보류 | 공식 후원 이벤트 API 확인 후 활성화 |
+| Chzzk | 구현됨 | 구현됨 | 치즈/실시간 후원 이벤트 수신 |
+| SOOP | 구현됨 | 구현됨 | 별풍선 후원 이벤트 수신 |
 
 ## 빌드
 
@@ -147,12 +147,12 @@ SOOP OAuth 설정은 `auth-server.config.example.yml`의 endpoint를 기준으�
 https://auth.example.com/mca/oauth/soop/callback
 ```
 
-SOOP 후원 이벤트 세션은 공식 후원 이벤트 API가 확인되기 전까지 비활성화 상태로 두는 것을 권장합니다.
+SOOP 후원 이벤트는 별풍선 개수 기준으로 보상 매칭됩니다. 예를 들어 별풍선 1개는 `amount: "1"`입니다.
 
 ```yml
 platforms:
   soop:
-    enabled: false
+    enabled: true
 ```
 
 ## Nginx 예시
@@ -194,11 +194,12 @@ curl https://auth.example.com/mca/ready
 ```text
 /mca connect <chzzk|soop>
 /mca reload
-/mca apply <player> <amount>
+/mca apply <player> <amount> [chzzk|soop]
 /mca status
 ```
 
 `/mca connect`는 플레이어만 사용할 수 있습니다. 인증 URL은 클릭 가능한 `[연결하러 가기]` 텍스트로 표시되고, pairing code는 콘솔 로그에만 남습니다.
+`/mca apply`는 수동 테스트용 보상 적용 명령어입니다. 대상 플레이어가 한 플랫폼에만 연결되어 있으면 플랫폼을 생략할 수 있고, 연결 토큰이 없거나 Chzzk/SOOP 둘 다 연결되어 있으면 `chzzk` 또는 `soop`을 직접 지정해야 합니다.
 
 권한:
 
@@ -294,7 +295,10 @@ Chzzk callback 실패:
 
 - Chzzk 앱에 `후원 조회` 권한이 있는지 확인합니다.
 - 해당 계정이 실제 후원 이벤트를 받을 수 있는 스트리머 계정인지 확인합니다.
-- SOOP 후원 이벤트는 공식 API 확인 전까지 보류 상태입니다.
+- `/mca reload` 후 `debug: true` 상태에서 콘솔에 `CHZZK WebSocket payload 수신`, `CHZZK 후원 감지`, `SOOP 패킷 수신`, `SOOP 별풍 감지` 로그가 나오는지 확인합니다.
+- Chzzk는 Session API 인증 URL 생성, WebSocket 연결, donation subscribe 성공 로그가 순서대로 나와야 합니다.
+- SOOP는 WebSocket 연결, 로그인 성공, 채팅방 join 성공 로그가 순서대로 나와야 합니다.
+- 보상은 Chzzk `amount`가 원 단위, SOOP `amount`가 별풍선 개수 기준입니다.
 
 ## 보안
 

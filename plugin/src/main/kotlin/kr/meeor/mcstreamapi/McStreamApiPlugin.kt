@@ -112,6 +112,9 @@ class McStreamApiPlugin : JavaPlugin() {
                 ),
             ),
             logger = pluginLogger,
+            playerUuidResolver = { playerName ->
+                server.getPlayerExact(playerName)?.uniqueId?.toString()
+            },
         )
     }
 
@@ -124,7 +127,7 @@ class McStreamApiPlugin : JavaPlugin() {
             rewardPipeline = DonationRewardPipeline { playerUuid, event ->
                 server.scheduler.runTask(this, Runnable {
                     val player = server.getPlayer(java.util.UUID.fromString(playerUuid)) ?: return@Runnable
-                    val result = manualRewardApplier?.applyDonation(player.name, event)
+                    val result = manualRewardApplier?.applyDonation(player.name, playerUuid, event)
                     pluginLogger.info(
                         "§a[후원] 보상 처리 완료: 플레이어=${player.name} 플랫폼=${event.platform} 후원자=${event.donatorName} " +
                             "수량=${event.amount} 결과=${result?.javaClass?.simpleName ?: "NONE"}",

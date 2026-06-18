@@ -260,6 +260,7 @@ Placeholder:
 
 ```text
 {player}
+{player_uuid}
 {streamer}
 {platform}
 {donator}

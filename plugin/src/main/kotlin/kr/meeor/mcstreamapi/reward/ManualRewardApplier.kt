@@ -18,6 +18,7 @@ class ManualRewardApplier(
     private val rewardMatcher: RewardMatcher = RewardMatcher(),
     private val actionExecutor: ActionExecutor,
     private val logger: PluginLogger? = null,
+    private val playerUuidResolver: (String) -> String? = { null },
 ) {
     fun amountSuggestions(): List<String> {
         return runCatching { apiRewardConfigLoader.load(apiConfigPath).amountSuggestions() }
@@ -30,6 +31,7 @@ class ManualRewardApplier(
     fun apply(playerName: String, amount: Long, platform: String? = null): ManualRewardApplyResult {
         return applyReward(
             playerName = playerName,
+            playerUuid = playerUuidResolver(playerName).orEmpty(),
             streamerName = playerName,
             platformFilter = platform,
             donatorName = "manual",
@@ -38,9 +40,10 @@ class ManualRewardApplier(
         )
     }
 
-    fun applyDonation(playerName: String, event: DonationEvent): ManualRewardApplyResult {
+    fun applyDonation(playerName: String, playerUuid: String, event: DonationEvent): ManualRewardApplyResult {
         return applyReward(
             playerName = playerName,
+            playerUuid = playerUuid,
             streamerName = event.streamerName,
             platformFilter = event.platform,
             donatorName = event.donatorName,
@@ -51,6 +54,7 @@ class ManualRewardApplier(
 
     private fun applyReward(
         playerName: String,
+        playerUuid: String,
         streamerName: String,
         platformFilter: String?,
         donatorName: String,
@@ -104,6 +108,7 @@ class ManualRewardApplier(
                 rewardId = reward.id,
                 placeholderContext = PlaceholderContext(
                     playerName = playerName,
+                    playerUuid = playerUuid,
                     streamerName = streamerName,
                     platform = platform,
                     donatorName = donatorName,

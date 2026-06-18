@@ -102,6 +102,7 @@ class PlaceholderResolver(
     private fun standardValue(key: String, context: PlaceholderContext): String? {
         return when (key) {
             "player", "player_name" -> context.playerName
+            "uuid", "player_uuid" -> context.playerUuid
             "streamer", "streamer_name" -> context.streamerName
             "platform", "streamer_platform" -> context.platform
             "donator", "donator_name" -> context.donatorName

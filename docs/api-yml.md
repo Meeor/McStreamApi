@@ -219,6 +219,7 @@ amount: "<..100>" # 1~100 중 랜덤
 ## placeholders
 
 - `{player}`: Minecraft 플레이어
+- `{player_uuid}`: Minecraft 플레이어 UUID (`{uuid}`도 동일)
 - `{streamer}`: 스트리머 이름
 - `{platform}`: 플랫폼
 - `{donator}`: 후원자 이름

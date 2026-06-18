@@ -10,11 +10,14 @@ class PlaceholderResolverTest {
         val resolver = PlaceholderResolver()
 
         val rendered = resolver.resolve(
-            template = "{player}:{streamer}:{platform}:{donator}:{amount}:{message}:{reward_id}",
+            template = "{player}:{player_uuid}:{uuid}:{streamer}:{platform}:{donator}:{amount}:{message}:{reward_id}",
             context = context(),
         )
 
-        assertEquals("Steve:Streamer:chzzk:Donator:1000:hello:reward_1", rendered)
+        assertEquals(
+            "Steve:00000000-0000-0000-0000-000000000001:00000000-0000-0000-0000-000000000001:Streamer:chzzk:Donator:1000:hello:reward_1",
+            rendered,
+        )
     }
 
     @Test
@@ -142,6 +145,7 @@ class PlaceholderResolverTest {
     private fun context(): PlaceholderContext {
         return PlaceholderContext(
             playerName = "Steve",
+            playerUuid = "00000000-0000-0000-0000-000000000001",
             streamerName = "Streamer",
             platform = "chzzk",
             donatorName = "Donator",

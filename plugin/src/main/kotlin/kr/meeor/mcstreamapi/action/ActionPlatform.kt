@@ -16,6 +16,8 @@ interface ActionPlatform {
         meta: GiveItemMeta,
     ): ActionExecutionResult
 
+    fun localizeGameValue(value: String): String = value
+
     fun sendPrivateMessage(playerName: String, message: String): Boolean
 
     fun broadcast(message: String)

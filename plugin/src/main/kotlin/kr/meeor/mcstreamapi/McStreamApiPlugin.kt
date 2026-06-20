@@ -5,6 +5,7 @@ import kr.meeor.mcstreamapi.action.ActionExecutor
 import kr.meeor.mcstreamapi.action.BukkitActionPlatform
 import kr.meeor.mcstreamapi.command.McaBukkitCommand
 import kr.meeor.mcstreamapi.command.McaCommandService
+import kr.meeor.mcstreamapi.command.StreamerPlayerIdentity
 import kr.meeor.mcstreamapi.config.PluginConfigBootstrap
 import kr.meeor.mcstreamapi.config.PluginRuntimeState
 import kr.meeor.mcstreamapi.logging.PluginLogger
@@ -21,12 +22,15 @@ import kr.meeor.mcstreamapi.placeholder.PlaceholderResolver
 import kr.meeor.mcstreamapi.placeholder.RandomConfigLoader
 import kr.meeor.mcstreamapi.placeholder.RandomResolver
 import kr.meeor.mcstreamapi.reward.ManualRewardApplier
+import kr.meeor.mcstreamapi.reward.StreamerRewardConfigLoader
 import kr.meeor.mcstreamapi.session.BukkitOnlinePlayerRegistry
 import kr.meeor.mcstreamapi.session.BukkitPlayerSessionListener
 import kr.meeor.mcstreamapi.session.DonationRewardPipeline
 import kr.meeor.mcstreamapi.session.PlayerDonationSessionManager
 import kr.meeor.mcstreamapi.token.TokenStore
 import org.bukkit.plugin.java.JavaPlugin
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class McStreamApiPlugin : JavaPlugin() {
     private val pluginLogger by lazy {
@@ -35,20 +39,24 @@ class McStreamApiPlugin : JavaPlugin() {
     private var runtimeState: PluginRuntimeState? = null
     private var sessionManager: PlayerDonationSessionManager? = null
     private var manualRewardApplier: ManualRewardApplier? = null
+    @Volatile
+    private var streamerPlayers: List<StreamerPlayerIdentity> = emptyList()
+    private val streamerPlayerNames = ConcurrentHashMap<String, String>()
 
     override fun onEnable() {
         val bootstrap = createConfigBootstrap()
         runtimeState = bootstrap.initialize()
-        registerCommands(bootstrap)
 
         val state = runtimeState ?: return
         if (state.firstRun) {
             pluginLogger.warning(
-                "McStreamApi created default runtime files. Configure config.yml, Api.yml, random.yml, custom-item.yml, then restart.",
+                "McStreamApi created default runtime files. Configure config.yml, Api.yml, random.yml, custom-item.yml, then restart. streamer-rewards.yml is created only when streamerRewards.enabled is true.",
             )
             server.pluginManager.disablePlugin(this)
             return
         }
+
+        registerCommands(bootstrap)
 
         if (!state.runtimeAvailable) {
             pluginLogger.warning("McStreamApi runtime features are disabled until valid auth and platform config exist.")
@@ -60,6 +68,8 @@ class McStreamApiPlugin : JavaPlugin() {
 
     override fun onDisable() {
         sessionManager?.stopAll()
+        getCommand("mca")?.setExecutor(null)
+        getCommand("mca")?.tabCompleter = null
         pluginLogger.info("McStreamApi bootstrap disabled.")
     }
 
@@ -92,10 +102,12 @@ class McStreamApiPlugin : JavaPlugin() {
                 )
             },
             activeSessions = { sessionManager?.activeSessions().orEmpty() },
+            streamerPlayers = { streamerPlayers },
         )
         val mcaCommand = McaBukkitCommand(this, commandService)
         getCommand("mca")?.setExecutor(mcaCommand)
         getCommand("mca")?.tabCompleter = mcaCommand
+        refreshStreamerPlayers()
     }
 
     private fun createManualRewardApplier(): ManualRewardApplier {
@@ -103,6 +115,7 @@ class McStreamApiPlugin : JavaPlugin() {
         val randomConfigLoader = RandomConfigLoader()
         return ManualRewardApplier(
             apiConfigPath = dataFolder.toPath().resolve("Api.yml"),
+            streamerRewardConfigPath = dataFolder.toPath().resolve("streamer-rewards.yml"),
             customItemConfigPath = dataFolder.toPath().resolve("custom-item.yml"),
             actionExecutor = ActionExecutor(
                 platform = BukkitActionPlatform(this, pluginLogger),
@@ -114,6 +127,9 @@ class McStreamApiPlugin : JavaPlugin() {
             logger = pluginLogger,
             playerUuidResolver = { playerName ->
                 server.getPlayerExact(playerName)?.uniqueId?.toString()
+            },
+            streamerRewardsEnabled = {
+                runtimeState?.validation?.streamerRewardsEnabled == true
             },
         )
     }
@@ -145,11 +161,56 @@ class McStreamApiPlugin : JavaPlugin() {
     private fun reloadRuntime(bootstrap: PluginConfigBootstrap): PluginRuntimeState {
         val state = bootstrap.initialize()
         runtimeState = state
+        refreshStreamerPlayers()
         sessionManager?.replaceProviders(createDonationProviders(createTokenStore()))
         server.onlinePlayers.forEach { player ->
             sessionManager?.playerJoined(player.uniqueId.toString(), player.name)
         }
         return state
+    }
+
+    private fun refreshStreamerPlayers() {
+        if (runtimeState?.validation?.streamerRewardsEnabled != true) {
+            streamerPlayers = emptyList()
+            return
+        }
+        val path = dataFolder.toPath().resolve("streamer-rewards.yml")
+        val config = runCatching { StreamerRewardConfigLoader().load(path) }
+            .getOrElse { throwable ->
+                pluginLogger.error("STREAMER_REWARD_CONFIG_LOAD_FAILED path=$path", throwable)
+                streamerPlayers = emptyList()
+                return
+            }
+        streamerPlayers = config.rewardsByPlayerUuid.mapNotNull { (rawUuid, platforms) ->
+            val uuid = runCatching { UUID.fromString(rawUuid) }.getOrElse {
+                pluginLogger.warning("STREAMER_REWARD_INVALID_UUID uuid=$rawUuid")
+                return@mapNotNull null
+            }
+            StreamerPlayerIdentity(
+                uuid = uuid.toString(),
+                playerName = server.getPlayer(uuid)?.name ?: streamerPlayerNames[uuid.toString()],
+                platforms = platforms.keys,
+            )
+        }.sortedBy(StreamerPlayerIdentity::displayName)
+
+        streamerPlayers.forEach { identity ->
+            val uuid = UUID.fromString(identity.uuid)
+            server.createPlayerProfile(uuid).update().whenComplete { profile, throwable ->
+                if (throwable != null) {
+                    pluginLogger.warning(
+                        "STREAMER_PROFILE_LOOKUP_FAILED uuid=${identity.uuid} reason=${throwable.javaClass.simpleName}",
+                    )
+                    return@whenComplete
+                }
+                val playerName = profile.name?.takeIf(String::isNotBlank) ?: return@whenComplete
+                streamerPlayerNames[identity.uuid] = playerName
+                synchronized(this) {
+                    streamerPlayers = streamerPlayers.map { current ->
+                        if (current.uuid == identity.uuid) current.copy(playerName = playerName) else current
+                    }.sortedBy(StreamerPlayerIdentity::displayName)
+                }
+            }
+        }
     }
 
     private fun createDonationProviders(tokenStore: TokenStore): Map<String, DonationProvider> {

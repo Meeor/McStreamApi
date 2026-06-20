@@ -6,6 +6,7 @@ import java.nio.file.Files
 import java.util.logging.Logger
 import kotlin.io.path.exists
 import kotlin.io.path.readText
+import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -24,6 +25,7 @@ class PluginConfigBootstrapTest {
 
         assertTrue(dataFolder.resolve("config.yml").exists())
         assertTrue(dataFolder.resolve("Api.yml").exists())
+        assertFalse(dataFolder.resolve("streamer-rewards.yml").exists())
         assertTrue(dataFolder.resolve("random.yml").exists())
         assertTrue(dataFolder.resolve("custom-item.yml").exists())
         assertTrue(dataFolder.resolve("secret.key").exists())
@@ -54,10 +56,53 @@ class PluginConfigBootstrapTest {
         assertTrue(dataFolder.resolve("custom-item.yml").readText().contains("donation_diamond"))
     }
 
+    @Test
+    fun `disabled streamer rewards does not create streamer reward file`() {
+        val dataFolder = Files.createTempDirectory("mcstreamapi-plugin-config")
+        dataFolder.resolve("config.yml").writeText(DEFAULT_CONFIG)
+        dataFolder.resolve("Api.yml").writeText("rewards: {}\n")
+        dataFolder.resolve("random.yml").writeText("random: {}\n")
+        dataFolder.resolve("custom-item.yml").writeText("items: {}\n")
+        dataFolder.resolve("secret.key").writeText("existing-key")
+        Files.createDirectories(dataFolder.resolve("tokens"))
+        val bootstrap = PluginConfigBootstrap(
+            dataFolder = dataFolder,
+            resourceProvider = { resourceName -> ByteArrayInputStream(defaultResource(resourceName).toByteArray()) },
+            logger = PluginLogger(Logger.getLogger("test")),
+        )
+
+        val state = bootstrap.initialize()
+
+        assertFalse(dataFolder.resolve("streamer-rewards.yml").exists())
+        assertFalse(state.firstRun)
+    }
+
+    @Test
+    fun `enabled streamer rewards creates file without putting existing install into first run`() {
+        val dataFolder = Files.createTempDirectory("mcstreamapi-plugin-config")
+        dataFolder.resolve("config.yml").writeText(DEFAULT_CONFIG + "\nstreamerRewards:\n  enabled: true\n")
+        dataFolder.resolve("Api.yml").writeText("rewards: {}\n")
+        dataFolder.resolve("random.yml").writeText("random: {}\n")
+        dataFolder.resolve("custom-item.yml").writeText("items: {}\n")
+        dataFolder.resolve("secret.key").writeText("existing-key")
+        Files.createDirectories(dataFolder.resolve("tokens"))
+        val bootstrap = PluginConfigBootstrap(
+            dataFolder = dataFolder,
+            resourceProvider = { resourceName -> ByteArrayInputStream(defaultResource(resourceName).toByteArray()) },
+            logger = PluginLogger(Logger.getLogger("test")),
+        )
+
+        val state = bootstrap.initialize()
+
+        assertTrue(dataFolder.resolve("streamer-rewards.yml").exists())
+        assertFalse(state.firstRun)
+    }
+
     private fun defaultResource(resourceName: String): String {
         return when (resourceName) {
             "defaults/config.yml" -> DEFAULT_CONFIG
             "defaults/Api.yml" -> "rewards: {}\n"
+            "defaults/streamer-rewards.yml" -> "streamers: {}\n"
             "defaults/random.yml" -> "random: {}\n"
             "defaults/custom-item.yml" -> "items: {}\n"
             else -> error("unexpected resource $resourceName")

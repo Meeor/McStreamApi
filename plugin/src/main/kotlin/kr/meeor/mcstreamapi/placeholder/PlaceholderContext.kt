@@ -9,4 +9,5 @@ data class PlaceholderContext(
     val message: String? = null,
     val rewardId: String,
     val playerUuid: String = "",
+    val unitCount: Long = 1,
 )

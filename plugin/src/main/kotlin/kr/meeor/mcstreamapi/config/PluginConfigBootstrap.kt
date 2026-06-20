@@ -18,14 +18,22 @@ class PluginConfigBootstrap(
 
         val createdFiles = mutableListOf<String>()
         copyDefaultIfMissing("defaults/config.yml", dataFolder.resolve("config.yml"), createdFiles)
+        val validation = validator.validate(dataFolder.resolve("config.yml"))
+        validation.warnings.forEach { warning -> logger.warning(warning) }
+
         copyDefaultIfMissing("defaults/Api.yml", dataFolder.resolve("Api.yml"), createdFiles)
+        if (validation.streamerRewardsEnabled) {
+            copyDefaultIfMissing(
+                "defaults/streamer-rewards.yml",
+                dataFolder.resolve("streamer-rewards.yml"),
+                createdFiles,
+                blocksRuntimeOnCreate = false,
+            )
+        }
         copyDefaultIfMissing("defaults/random.yml", dataFolder.resolve("random.yml"), createdFiles)
         copyDefaultIfMissing("defaults/custom-item.yml", dataFolder.resolve("custom-item.yml"), createdFiles)
         createSecretKeyIfMissing(dataFolder.resolve("secret.key"), createdFiles)
         createDirectoryIfMissing(dataFolder.resolve("tokens"), createdFiles)
-
-        val validation = validator.validate(dataFolder.resolve("config.yml"))
-        validation.warnings.forEach { warning -> logger.warning(warning) }
 
         return PluginRuntimeState(
             createdFiles = createdFiles,
@@ -37,6 +45,7 @@ class PluginConfigBootstrap(
         resourceName: String,
         target: Path,
         createdFiles: MutableList<String>,
+        blocksRuntimeOnCreate: Boolean = true,
     ) {
         if (Files.exists(target)) {
             return
@@ -48,14 +57,18 @@ class PluginConfigBootstrap(
                 ?: throw IllegalStateException("Missing bundled resource: $resourceName")
             Files.writeString(target, fallback)
             logger.warning("DEFAULT_RESOURCE_FALLBACK resource=$resourceName target=$target")
-            createdFiles.add(dataFolder.relativize(target).toString())
+            if (blocksRuntimeOnCreate) {
+                createdFiles.add(dataFolder.relativize(target).toString())
+            }
             return
         }
 
         resource.use { input ->
             Files.copy(input, target)
         }
-        createdFiles.add(dataFolder.relativize(target).toString())
+        if (blocksRuntimeOnCreate) {
+            createdFiles.add(dataFolder.relativize(target).toString())
+        }
     }
 
     private fun createSecretKeyIfMissing(target: Path, createdFiles: MutableList<String>) {
@@ -86,7 +99,9 @@ class PluginConfigBootstrap(
     }
 
     companion object {
-        private const val DEFAULT_CUSTOM_ITEM_YML = """items:
+        private const val DEFAULT_CUSTOM_ITEM_YML = """# 복잡한 아이템을 이름으로 등록하고 Api.yml의 custom-give에서 참조합니다.
+# 문자열 필드는 색상 코드와 placeholder를 사용할 수 있습니다.
+items:
   donation_diamond:
     material: "DIAMOND"
     amount: 1

@@ -13,6 +13,9 @@ class RewardParserTest {
                 mapOf(
                     "id" to "default_chance",
                     "amount" to "1000",
+                    "unitAmount" to 100,
+                    "bonusAmount" to 1000,
+                    "bonusCount" to 1,
                     "actions" to listOf(mapOf("type" to "broadcast")),
                 ),
                 mapOf(
@@ -24,12 +27,34 @@ class RewardParserTest {
                     "id" to "missing_actions",
                     "amount" to "5000+",
                 ),
+                mapOf(
+                    "id" to "invalid_unit_amount",
+                    "amount" to "100+",
+                    "unitAmount" to 0,
+                    "actions" to listOf(mapOf("type" to "broadcast")),
+                ),
+                mapOf(
+                    "id" to "incomplete_bonus",
+                    "amount" to "100+",
+                    "unitAmount" to 100,
+                    "bonusAmount" to 1000,
+                    "actions" to listOf(mapOf("type" to "broadcast")),
+                ),
             ),
         )
 
         assertEquals(1, result.rewards.size)
         assertEquals(Reward.DEFAULT_CHANCE, result.rewards.single().chance)
+        assertEquals(100, result.rewards.single().unitAmount)
+        assertEquals(1000, result.rewards.single().bonusAmount)
+        assertEquals(1, result.rewards.single().bonusCount)
+        assertEquals(11, result.rewards.single().unitCount(1000))
+        assertEquals(55, result.rewards.single().unitCount(5000))
+        assertEquals(110, result.rewards.single().unitCount(10000))
         assertIs<AmountRule.Exact>(result.rewards.single().amountRule)
-        assertEquals(listOf("invalid_amount", "missing_actions"), result.disabledRewards.map { it.id })
+        assertEquals(
+            listOf("invalid_amount", "missing_actions", "invalid_unit_amount", "incomplete_bonus"),
+            result.disabledRewards.map { it.id },
+        )
     }
 }

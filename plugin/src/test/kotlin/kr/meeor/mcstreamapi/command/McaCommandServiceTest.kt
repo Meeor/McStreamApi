@@ -36,6 +36,7 @@ class McaCommandServiceTest {
 
         assertEquals("권한이 없습니다.", service.execute(player(), listOf("reload")).message)
         assertEquals("권한이 없습니다.", service.execute(player(), listOf("apply", "Steve", "1000")).message)
+        assertEquals("권한이 없습니다.", service.execute(player(), listOf("apply-streamer", "Steve", "1000")).message)
         assertEquals("권한이 없습니다.", service.execute(player(), listOf("status")).message)
     }
 
@@ -63,7 +64,7 @@ class McaCommandServiceTest {
 
         assertEquals(listOf("connect"), service.complete(player(), listOf("")))
         assertEquals(
-            listOf("connect", "reload", "apply", "status"),
+            listOf("connect", "reload", "apply", "apply-streamer", "status"),
             service.complete(player(allPermissions = true), listOf("")),
         )
     }
@@ -78,6 +79,33 @@ class McaCommandServiceTest {
 
         assertEquals(emptyList(), service.complete(player(), listOf("apply", "")))
         assertEquals(listOf("Meeor"), service.complete(player(allPermissions = true), listOf("apply", "M")))
+    }
+
+    @Test
+    fun `apply streamer player completion uses resolved streamer names`() {
+        val state = runtimeState(enabledPlatforms = setOf("soop"), streamerRewardsEnabled = true)
+        val service = McaCommandService(
+            runtimeStateProvider = { state },
+            reloadRuntimeState = { state },
+            streamerPlayers = {
+                listOf(
+                    StreamerPlayerIdentity(
+                        uuid = "00000000-0000-0000-0000-000000000001",
+                        playerName = "Meeor",
+                        platforms = setOf("soop"),
+                    ),
+                )
+            },
+        )
+
+        assertEquals(
+            listOf("Meeor"),
+            service.complete(player(allPermissions = true), listOf("apply-streamer", "M")),
+        )
+        assertEquals(
+            listOf("soop"),
+            service.complete(player(allPermissions = true), listOf("apply-streamer", "Meeor", "1000", "")),
+        )
     }
 
     @Test
@@ -129,7 +157,10 @@ class McaCommandServiceTest {
         )
     }
 
-    private fun runtimeState(enabledPlatforms: Set<String>): PluginRuntimeState {
+    private fun runtimeState(
+        enabledPlatforms: Set<String>,
+        streamerRewardsEnabled: Boolean = false,
+    ): PluginRuntimeState {
         return PluginRuntimeState(
             createdFiles = emptyList(),
             validation = ConfigValidationResult(
@@ -137,6 +168,7 @@ class McaCommandServiceTest {
                 enabledPlatforms = enabledPlatforms,
                 disabledPlatforms = setOf("chzzk", "soop") - enabledPlatforms,
                 warnings = emptyList(),
+                streamerRewardsEnabled = streamerRewardsEnabled,
                 authConfig = PluginAuthConfig(
                     serverBaseUrl = "http://localhost:8080",
                     sharedSecret = "12345678901234567890123456789012",

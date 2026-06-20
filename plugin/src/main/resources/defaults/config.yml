@@ -1,0 +1,41 @@
+# 인증 서버 연결 설정입니다. 서버 주소와 sharedSecret은 AuthServer 설정과 같아야 합니다.
+auth:
+  serverBaseUrl: "https://auth.example.com/mca"
+  sharedSecret: "CHANGE_ME_RANDOM_LONG_SECRET"
+  pollingIntervalSeconds: 3
+  pairingTimeoutSeconds: 600
+
+# 토큰 갱신 실패 시 재시도 횟수와 간격(초)입니다.
+token:
+  maxRefreshRetries: 3
+  refreshRetryDelaySeconds: 3
+
+# 플레이어 UUID별 전용 보상 기능입니다.
+# false이면 streamer-rewards.yml을 생성하거나 읽지 않고 Api.yml의 공용 보상만 사용합니다.
+# true로 변경한 뒤 서버를 시작하면 streamer-rewards.yml이 자동 생성됩니다.
+streamerRewards:
+  enabled: false
+
+# 사용할 후원 플랫폼별 OAuth 및 이벤트 수신 설정입니다.
+platforms:
+  chzzk:
+    enabled: true
+    clientId: "CHZZK_CLIENT_ID"
+    clientSecret: "CHZZK_CLIENT_SECRET"
+    eventPollingIntervalSeconds: 5
+    tokenRefreshBeforeSeconds: 300
+
+  soop:
+    enabled: true
+    clientId: "SOOP_CLIENT_ID"
+    clientSecret: "SOOP_CLIENT_SECRET"
+    eventPollingIntervalSeconds: 5
+    tokenRefreshBeforeSeconds: 300
+    # 광고/영상 별풍선 이벤트도 일반 후원 이벤트로 받을지 설정합니다.
+    receiveAdBalloons: false
+    receiveVideoBalloons: false
+
+# debug는 상세 로그, maskSensitiveValues는 토큰/비밀값 마스킹 여부입니다.
+logging:
+  debug: false
+  maskSensitiveValues: true

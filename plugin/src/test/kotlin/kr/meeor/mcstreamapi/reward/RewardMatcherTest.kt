@@ -31,6 +31,18 @@ class RewardMatcherTest {
     }
 
     @Test
+    fun `highest matching plus minimum wins`() {
+        val rewards = listOf(
+            reward("100-plus", AmountRule.Plus(100)),
+            reward("1000-plus", AmountRule.Plus(1000)),
+        )
+
+        assertEquals("100-plus", RewardMatcher(FixedRandomSource(0)).match(rewards, 999)?.id)
+        assertEquals("1000-plus", RewardMatcher(FixedRandomSource(0)).match(rewards, 1000)?.id)
+        assertEquals("1000-plus", RewardMatcher(FixedRandomSource(0)).match(rewards, 5000)?.id)
+    }
+
+    @Test
     fun `chance less than or equal to zero is excluded`() {
         val rewards = listOf(
             reward("disabled", AmountRule.Exact(1000), chance = 0),

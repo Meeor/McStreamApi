@@ -2,6 +2,10 @@
 
 `random.yml`은 Action 문자열에서 사용할 랜덤 치환값을 정의합니다.
 
+`chat`, `broadcast`, `title`에서 `{random.key}` 또는 display가 없는 `{random.key.display}`를 사용하면 아이템, 엔티티, 포션 효과 값은 Minecraft 번역 키로 전송됩니다. 따라서 내부 값은 `diamond`, `zombie`, `speed` 그대로 유지하면서 플레이어의 클라이언트 언어에 맞춰 표시됩니다. `cmd`, `summon`, `give` 등 실행용 값은 번역하지 않습니다.
+
+`display`를 직접 작성한 항목은 자동 번역보다 해당 문자열이 우선합니다.
+
 ## 기본 구조
 
 ```yml

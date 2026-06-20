@@ -177,4 +177,22 @@ class PluginConfigValidatorTest {
 
         assertTrue(result.loggingConfig.debug)
     }
+
+    @Test
+    fun `streamer reward flag defaults false and can be enabled`() {
+        val disabledConfig = Files.createTempFile("mcstreamapi-config", ".yml")
+        disabledConfig.writeText("platforms: {}\n")
+        assertFalse(validator.validate(disabledConfig).streamerRewardsEnabled)
+
+        val enabledConfig = Files.createTempFile("mcstreamapi-config", ".yml")
+        enabledConfig.writeText(
+            """
+            streamerRewards:
+              enabled: true
+            platforms: {}
+            """.trimIndent(),
+        )
+
+        assertTrue(validator.validate(enabledConfig).streamerRewardsEnabled)
+    }
 }

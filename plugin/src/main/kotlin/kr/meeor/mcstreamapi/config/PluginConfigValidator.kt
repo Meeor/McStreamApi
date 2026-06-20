@@ -34,6 +34,7 @@ class PluginConfigValidator {
         val loggingConfig = PluginLoggingConfig(
             debug = logging.boolean("debug", default = false),
         )
+        val streamerRewardsEnabled = root.map("streamerRewards").boolean("enabled", default = false)
 
         val auth = root.map("auth")
         val serverBaseUrl = auth.string("serverBaseUrl")
@@ -90,6 +91,7 @@ class PluginConfigValidator {
             authConfig = authConfig,
             platformConfigs = platformConfigs,
             loggingConfig = loggingConfig,
+            streamerRewardsEnabled = streamerRewardsEnabled,
         )
     }
 

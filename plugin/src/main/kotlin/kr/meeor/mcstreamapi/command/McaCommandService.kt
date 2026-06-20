@@ -17,6 +17,7 @@ class McaCommandService(
     private val connectedPlayerNames: () -> List<String> = { emptyList() },
     private val connectedTokens: () -> List<ConnectedTokenInfo> = { emptyList() },
     private val activeSessions: () -> List<ActiveDonationSession> = { emptyList() },
+    private val streamerPlayers: () -> List<StreamerPlayerIdentity> = { emptyList() },
 ) {
     fun execute(sender: McaCommandSender, args: List<String>): McaCommandResult {
         if (args.isEmpty()) {
@@ -27,6 +28,7 @@ class McaCommandService(
             "connect" -> connect(sender, args.drop(1))
             "reload" -> reload(sender)
             "apply" -> apply(sender, args.drop(1))
+            "apply-streamer" -> applyStreamer(sender, args.drop(1))
             "status" -> status(sender, args.drop(1))
             else -> McaCommandResult("알 수 없는 명령입니다. /mca")
         }
@@ -39,6 +41,11 @@ class McaCommandService(
                 "connect" -> SUPPORTED_PLATFORMS.matching(args[1])
                 "apply" -> if (sender.canUse(PERMISSION_APPLY)) {
                     connectedPlayerNames().matching(args[1])
+                } else {
+                    emptyList()
+                }
+                "apply-streamer" -> if (sender.canUse(PERMISSION_APPLY)) {
+                    streamerPlayers().map(StreamerPlayerIdentity::displayName).distinct().matching(args[1])
                 } else {
                     emptyList()
                 }
@@ -55,11 +62,25 @@ class McaCommandService(
                 } else {
                     emptyList()
                 }
+                "apply-streamer" -> if (sender.canUse(PERMISSION_APPLY)) {
+                    streamerPlayers().firstOrNull { it.matches(args[1]) }
+                        ?.let { manualRewardApplier?.streamerAmountSuggestions(it.uuid).orEmpty() }
+                        .orEmpty()
+                        .matching(args[2])
+                } else {
+                    emptyList()
+                }
                 else -> emptyList()
             }
             4 -> when (args[0].lowercase()) {
                 "apply" -> if (sender.canUse(PERMISSION_APPLY)) {
                     SUPPORTED_PLATFORMS.matching(args[3])
+                } else {
+                    emptyList()
+                }
+                "apply-streamer" -> if (sender.canUse(PERMISSION_APPLY)) {
+                    streamerPlayers().firstOrNull { it.matches(args[1]) }
+                        ?.platforms.orEmpty().sorted().matching(args[3])
                 } else {
                     emptyList()
                 }
@@ -185,6 +206,69 @@ class McaCommandService(
         }
     }
 
+    private fun applyStreamer(sender: McaCommandSender, args: List<String>): McaCommandResult {
+        if (!sender.canUse(PERMISSION_APPLY)) {
+            return McaCommandResult("권한이 없습니다.")
+        }
+        if (runtimeStateProvider()?.validation?.streamerRewardsEnabled != true) {
+            return McaCommandResult("스트리머 전용 보상 기능이 비활성화되어 있습니다.")
+        }
+        if (args.size < 2) {
+            return McaCommandResult("사용법: /mca apply-streamer <player> <amount> [chzzk|soop]")
+        }
+
+        val matchedPlayers = streamerPlayers().filter { it.matches(args[0]) }
+        if (matchedPlayers.isEmpty()) {
+            return McaCommandResult("streamer-rewards.yml에서 플레이어를 찾을 수 없습니다: ${args[0]}")
+        }
+        if (matchedPlayers.size > 1) {
+            return McaCommandResult("같은 이름의 플레이어가 여러 명입니다. 플레이어 UUID를 입력해주세요.")
+        }
+        val player = matchedPlayers.single()
+        val amount = args[1].toLongOrNull()
+        if (amount == null || amount <= 0) {
+            return McaCommandResult("amount는 1 이상의 숫자여야 합니다.")
+        }
+        val requestedPlatform = args.getOrNull(2)?.lowercase()
+        if (requestedPlatform != null && requestedPlatform !in SUPPORTED_PLATFORMS) {
+            return McaCommandResult("지원하지 않는 플랫폼입니다. 사용 가능: chzzk, soop")
+        }
+        val platform = requestedPlatform ?: when (player.platforms.size) {
+            0 -> return McaCommandResult("플레이어의 전용 보상 플랫폼이 없습니다.")
+            1 -> player.platforms.single()
+            else -> return McaCommandResult(
+                "여러 플랫폼이 설정되어 있습니다. /mca apply-streamer <player> <amount> <chzzk|soop> 형식으로 지정해주세요.",
+            )
+        }
+        if (platform !in player.platforms) {
+            return McaCommandResult("플레이어의 전용 보상에 $platform 플랫폼이 없습니다.")
+        }
+        val applier = manualRewardApplier
+            ?: return McaCommandResult("수동 보상 적용 기능이 아직 준비되지 않았습니다.")
+
+        return when (val result = applier.applyStreamer(player.displayName, player.uuid, amount, platform)) {
+            is ManualRewardApplyResult.Success -> McaCommandResult(
+                listOf(
+                    "§8§m--------------------",
+                    "§a§l스트리머 전용 보상 적용 완료",
+                    "§7대상: §f${player.displayName}",
+                    "§7UUID: §f${player.uuid}",
+                    "§7금액: §f$amount",
+                    "§7플랫폼: §f${result.platform}",
+                    "§7보상 ID: §f${result.rewardId}",
+                    "§7실행 Action: §f${result.actionCount}개",
+                    "§8§m--------------------",
+                ).joinToString("\n"),
+            )
+            is ManualRewardApplyResult.PartialSuccess -> McaCommandResult(
+                "§e스트리머 전용 보상 일부 적용: reward=${result.rewardId} 실패=${result.failedCount}/${result.actionCount}",
+            )
+            is ManualRewardApplyResult.Failure -> McaCommandResult(
+                "§c스트리머 전용 보상 적용 실패: ${result.message}",
+            )
+        }
+    }
+
     private fun status(sender: McaCommandSender, args: List<String>): McaCommandResult {
         if (!sender.canUse(PERMISSION_STATUS)) {
             return McaCommandResult("권한이 없습니다.")
@@ -298,6 +382,7 @@ class McaCommandService(
         }
         if (sender.canUse(PERMISSION_APPLY)) {
             commands.add("apply")
+            commands.add("apply-streamer")
         }
         if (sender.canUse(PERMISSION_STATUS)) {
             commands.add("status")
@@ -340,7 +425,7 @@ class McaCommandService(
         const val PERMISSION_STATUS = "mcstreamapi.status"
 
         private val SUPPORTED_PLATFORMS = listOf("chzzk", "soop")
-        private const val HELP_MESSAGE = "사용법: /mca connect <platform> | reload | apply <player> <amount> [platform] | status"
+        private const val HELP_MESSAGE = "사용법: /mca connect <platform> | reload | apply <player> <amount> [platform] | apply-streamer <player> <amount> [platform] | status"
         private const val TOKEN_EXPIRING_SOON_SECONDS = 300L
         private const val APPLY_PLATFORM_AMBIGUOUS = "__ambiguous__"
         private const val APPLY_PLATFORM_UNSUPPORTED = "__unsupported__"

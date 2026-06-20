@@ -1,8 +1,10 @@
 package kr.meeor.mcstreamapi.action
 
 import kr.meeor.mcstreamapi.logging.PluginLogger
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
-import org.bukkit.ChatColor
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.Registry
@@ -16,6 +18,7 @@ import org.bukkit.inventory.meta.PotionMeta
 import org.bukkit.inventory.meta.SkullMeta
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.potion.PotionEffect
+import java.time.Duration
 
 class BukkitActionPlatform(
     private val plugin: JavaPlugin,
@@ -37,6 +40,8 @@ class BukkitActionPlatform(
     override fun isPlayerOnline(playerName: String): Boolean {
         return Bukkit.getPlayerExact(playerName)?.isOnline == true
     }
+
+    override fun localizeGameValue(value: String): String = GameTranslationToken.encode(value)
 
     @Suppress("DEPRECATION")
     override fun giveItem(
@@ -197,15 +202,14 @@ class BukkitActionPlatform(
 
     override fun sendPrivateMessage(playerName: String, message: String): Boolean {
         val player = Bukkit.getPlayerExact(playerName) ?: return false
-        player.sendMessage(colorize(message))
+        player.sendMessage(localizedComponent(message))
         return true
     }
 
     override fun broadcast(message: String) {
-        Bukkit.broadcastMessage(colorize(message))
+        Bukkit.broadcast(localizedComponent(message))
     }
 
-    @Suppress("DEPRECATION")
     override fun sendTitle(
         playerName: String,
         title: String,
@@ -214,18 +218,44 @@ class BukkitActionPlatform(
         stayTicks: Int,
         fadeOutTicks: Int,
     ) {
-        Bukkit.getPlayerExact(playerName)?.sendTitle(
-            colorize(title),
-            subtitle?.let(::colorize),
-            fadeInTicks,
-            stayTicks,
-            fadeOutTicks,
+        val player = Bukkit.getPlayerExact(playerName) ?: return
+        player.showTitle(
+            Title.title(
+                localizedComponent(title),
+                subtitle?.let(::localizedComponent) ?: Component.empty(),
+                Title.Times.times(
+                    fadeInTicks.toDuration(),
+                    stayTicks.toDuration(),
+                    fadeOutTicks.toDuration(),
+                ),
+            ),
         )
     }
 
     private fun colorize(message: String): String {
-        return ChatColor.translateAlternateColorCodes('&', message)
+        return translateColorCodes(message)
     }
+
+    private fun localizedComponent(message: String): Component {
+        var component: Component = LEGACY_SERIALIZER.deserialize(colorize(message))
+        GameTranslationToken.findAll(message).distinctBy { it.encoded }.forEach { token ->
+            val replacement = translationKey(token.value)
+                ?.let(Component::translatable)
+                ?: Component.text(token.value)
+            component = component.replaceText { builder ->
+                builder.matchLiteral(token.encoded).replacement(replacement)
+            }
+        }
+        return component
+    }
+
+    private fun translationKey(value: String): String? {
+        return Registry.MATERIAL.lookup(value)?.translationKey()
+            ?: Registry.ENTITY_TYPE.lookup(value)?.translationKey()
+            ?: Registry.MOB_EFFECT.lookup(value)?.translationKey()
+    }
+
+    private fun Int.toDuration(): Duration = Duration.ofMillis(coerceAtLeast(0) * MILLIS_PER_TICK)
 
     private fun <T : org.bukkit.Keyed> Registry<T>.lookup(raw: String): T? {
         val normalized = raw.normalizedKey()
@@ -242,5 +272,10 @@ class BukkitActionPlatform(
 
     private fun String.sanitizeKey(): String {
         return lowercase().replace(Regex("[^a-z0-9/._-]"), "_")
+    }
+
+    private companion object {
+        val LEGACY_SERIALIZER: LegacyComponentSerializer = LegacyComponentSerializer.legacySection()
+        const val MILLIS_PER_TICK = 50L
     }
 }

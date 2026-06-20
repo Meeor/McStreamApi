@@ -1,0 +1,14 @@
+# config.yml의 streamerRewards.enabled가 true일 때만 생성하고 읽습니다.
+# Minecraft 플레이어 UUID별 전용 보상을 정의하며 내부 reward 문법은 Api.yml과 같습니다.
+# 해당 UUID/플랫폼/금액에 맞는 전용 보상이 없으면 Api.yml 공용 보상으로 폴백합니다.
+# 예시:
+# streamers:
+#   "00000000-0000-0000-0000-000000000001":
+#     chzzk:
+#       - id: "personal_1000"
+#         amount: "1000"
+#         chance: 100
+#         actions:
+#           - type: "broadcast"
+#             message: "&a&l전용 보상"
+streamers: {}

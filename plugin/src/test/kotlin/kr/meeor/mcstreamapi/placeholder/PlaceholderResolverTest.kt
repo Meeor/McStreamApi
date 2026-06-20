@@ -10,12 +10,12 @@ class PlaceholderResolverTest {
         val resolver = PlaceholderResolver()
 
         val rendered = resolver.resolve(
-            template = "{player}:{player_uuid}:{uuid}:{streamer}:{platform}:{donator}:{amount}:{message}:{reward_id}",
+            template = "{player}:{player_uuid}:{uuid}:{streamer}:{platform}:{donator}:{amount}:{unit_count}:{message}:{reward_id}",
             context = context(),
         )
 
         assertEquals(
-            "Steve:00000000-0000-0000-0000-000000000001:00000000-0000-0000-0000-000000000001:Streamer:chzzk:Donator:1000:hello:reward_1",
+            "Steve:00000000-0000-0000-0000-000000000001:00000000-0000-0000-0000-000000000001:Streamer:chzzk:Donator:1000:10:hello:reward_1",
             rendered,
         )
     }
@@ -96,6 +96,28 @@ class PlaceholderResolverTest {
     }
 
     @Test
+    fun `message renderer localizes game values but keeps explicit display`() {
+        val resolver = PlaceholderResolver(
+            RandomResolver(
+                RandomTable(
+                    mapOf(
+                        "mob" to listOf(RandomEntry("zombie")),
+                        "named_mob" to listOf(RandomEntry("creeper", display = "크리퍼 등장")),
+                    ),
+                ),
+            ),
+        )
+        val renderer: (String) -> String = { value -> "<$value>" }
+
+        assertEquals("<zombie>", resolver.resolve("{random.mob}", context(), gameValueRenderer = renderer))
+        assertEquals("<zombie>", resolver.resolve("{random.mob.display}", context(), gameValueRenderer = renderer))
+        assertEquals(
+            "크리퍼 등장",
+            resolver.resolve("{random.named_mob.display}", context(), gameValueRenderer = renderer),
+        )
+    }
+
+    @Test
     fun `random custom item display can be used for messages`() {
         val resolver = PlaceholderResolver(
             RandomResolver(
@@ -150,6 +172,7 @@ class PlaceholderResolverTest {
             platform = "chzzk",
             donatorName = "Donator",
             amount = 1000,
+            unitCount = 10,
             message = "hello",
             rewardId = "reward_1",
         )

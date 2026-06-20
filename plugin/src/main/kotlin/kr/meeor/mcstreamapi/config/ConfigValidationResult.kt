@@ -8,6 +8,7 @@ data class ConfigValidationResult(
     val authConfig: PluginAuthConfig? = null,
     val platformConfigs: Map<String, PluginPlatformConfig> = emptyMap(),
     val loggingConfig: PluginLoggingConfig = PluginLoggingConfig(),
+    val streamerRewardsEnabled: Boolean = false,
 )
 
 data class PluginAuthConfig(

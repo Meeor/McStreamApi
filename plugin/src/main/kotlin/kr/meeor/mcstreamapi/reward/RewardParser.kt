@@ -17,6 +17,40 @@ class RewardParser {
                 disabled.add(DisabledReward(id, "INVALID_AMOUNT"))
                 return@forEachIndexed
             }
+            val unitAmount = if (raw.containsKey("unitAmount")) {
+                raw.long("unitAmount")?.takeIf { it > 0 } ?: run {
+                    disabled.add(DisabledReward(id, "INVALID_UNIT_AMOUNT"))
+                    return@forEachIndexed
+                }
+            } else {
+                null
+            }
+            val hasBonusAmount = raw.containsKey("bonusAmount")
+            val hasBonusCount = raw.containsKey("bonusCount")
+            if (hasBonusAmount != hasBonusCount) {
+                disabled.add(DisabledReward(id, "INCOMPLETE_BONUS_CONFIG"))
+                return@forEachIndexed
+            }
+            if (hasBonusAmount && unitAmount == null) {
+                disabled.add(DisabledReward(id, "MISSING_UNIT_AMOUNT_FOR_BONUS"))
+                return@forEachIndexed
+            }
+            val bonusAmount = if (hasBonusAmount) {
+                raw.long("bonusAmount")?.takeIf { it > 0 } ?: run {
+                    disabled.add(DisabledReward(id, "INVALID_BONUS_AMOUNT"))
+                    return@forEachIndexed
+                }
+            } else {
+                null
+            }
+            val bonusCount = if (hasBonusCount) {
+                raw.long("bonusCount")?.takeIf { it > 0 } ?: run {
+                    disabled.add(DisabledReward(id, "INVALID_BONUS_COUNT"))
+                    return@forEachIndexed
+                }
+            } else {
+                null
+            }
 
             val actions = raw.actions()
             if (actions.isEmpty()) {
@@ -28,6 +62,9 @@ class RewardParser {
                 Reward(
                     id = id,
                     amountRule = amountRule,
+                    unitAmount = unitAmount,
+                    bonusAmount = bonusAmount,
+                    bonusCount = bonusCount,
                     chance = raw.int("chance") ?: Reward.DEFAULT_CHANCE,
                     actions = actions,
                 ),
@@ -43,6 +80,14 @@ class RewardParser {
         return when (val value = this[key]) {
             is Number -> value.toInt()
             is String -> value.toIntOrNull()
+            else -> null
+        }
+    }
+
+    private fun Map<String, Any?>.long(key: String): Long? {
+        return when (val value = this[key]) {
+            is Number -> value.toLong()
+            is String -> value.toLongOrNull()
             else -> null
         }
     }

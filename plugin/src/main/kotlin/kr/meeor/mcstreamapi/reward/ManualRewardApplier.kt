@@ -11,14 +11,16 @@ import java.nio.file.Path
 
 class ManualRewardApplier(
     private val apiConfigPath: Path,
+    private val streamerRewardConfigPath: Path? = null,
     private val customItemConfigPath: Path? = null,
     private val apiRewardConfigLoader: ApiRewardConfigLoader = ApiRewardConfigLoader(),
+    private val streamerRewardConfigLoader: StreamerRewardConfigLoader = StreamerRewardConfigLoader(),
     private val customItemConfigLoader: CustomItemConfigLoader = CustomItemConfigLoader(),
-    private val rewardParser: RewardParser = RewardParser(),
-    private val rewardMatcher: RewardMatcher = RewardMatcher(),
+    private val rewardSelector: RewardSelector = RewardSelector(),
     private val actionExecutor: ActionExecutor,
     private val logger: PluginLogger? = null,
     private val playerUuidResolver: (String) -> String? = { null },
+    private val streamerRewardsEnabled: () -> Boolean = { false },
 ) {
     fun amountSuggestions(): List<String> {
         return runCatching { apiRewardConfigLoader.load(apiConfigPath).amountSuggestions() }
@@ -26,6 +28,22 @@ class ManualRewardApplier(
                 logger?.error("API_CONFIG_LOAD_FAILED path=$apiConfigPath", throwable)
                 emptyList()
             }
+    }
+
+    fun streamerAmountSuggestions(playerUuid: String, platform: String? = null): List<String> {
+        if (!streamerRewardsEnabled()) {
+            return emptyList()
+        }
+        return runCatching {
+            val config = streamerRewardConfigPath?.let(streamerRewardConfigLoader::load)
+                ?: return@runCatching emptyList()
+            val platforms = platform?.let { listOf(it.lowercase()) } ?: config.platforms(playerUuid)
+            platforms.flatMap { config.rewards(playerUuid, it) }
+                .mapNotNull { it["amount"]?.toString()?.trim() }
+                .filter { it.toLongOrNull()?.let { amount -> amount > 0 } == true }
+                .distinct()
+                .sortedBy(String::toLong)
+        }.getOrElse { emptyList() }
     }
 
     fun apply(playerName: String, amount: Long, platform: String? = null): ManualRewardApplyResult {
@@ -52,6 +70,27 @@ class ManualRewardApplier(
         )
     }
 
+    fun applyStreamer(
+        playerName: String,
+        playerUuid: String,
+        amount: Long,
+        platform: String,
+    ): ManualRewardApplyResult {
+        if (!streamerRewardsEnabled()) {
+            return ManualRewardApplyResult.Failure("스트리머 전용 보상 기능이 비활성화되어 있습니다.")
+        }
+        return applyReward(
+            playerName = playerName,
+            playerUuid = playerUuid,
+            streamerName = playerName,
+            platformFilter = platform,
+            donatorName = "manual-streamer",
+            amount = amount,
+            message = "manual streamer apply",
+            streamerOnly = true,
+        )
+    }
+
     private fun applyReward(
         playerName: String,
         playerUuid: String,
@@ -60,12 +99,28 @@ class ManualRewardApplier(
         donatorName: String,
         amount: Long,
         message: String?,
+        streamerOnly: Boolean = false,
     ): ManualRewardApplyResult {
-        val config = runCatching { apiRewardConfigLoader.load(apiConfigPath) }
-            .getOrElse { throwable ->
-                logger?.error("API_CONFIG_LOAD_FAILED path=$apiConfigPath", throwable)
-                return ManualRewardApplyResult.Failure("Api.yml을 읽을 수 없습니다. 콘솔 로그를 확인해주세요.")
+        val config = if (streamerOnly) {
+            ApiRewardConfig(emptyMap())
+        } else {
+            runCatching { apiRewardConfigLoader.load(apiConfigPath) }
+                .getOrElse { throwable ->
+                    logger?.error("API_CONFIG_LOAD_FAILED path=$apiConfigPath", throwable)
+                    return ManualRewardApplyResult.Failure("Api.yml을 읽을 수 없습니다. 콘솔 로그를 확인해주세요.")
+                }
+        }
+        val streamerConfig = if (streamerRewardsEnabled()) {
+            runCatching {
+                streamerRewardConfigPath?.let(streamerRewardConfigLoader::load)
+                    ?: StreamerRewardConfig(emptyMap())
+            }.getOrElse { throwable ->
+                logger?.error("STREAMER_REWARD_CONFIG_LOAD_FAILED path=$streamerRewardConfigPath", throwable)
+                StreamerRewardConfig(emptyMap())
             }
+        } else {
+            StreamerRewardConfig(emptyMap())
+        }
         val customItems = runCatching {
             customItemConfigPath?.let { customItemConfigLoader.load(it).items }.orEmpty()
         }.getOrElse { throwable ->
@@ -73,33 +128,41 @@ class ManualRewardApplier(
             return ManualRewardApplyResult.Failure("custom-item.yml을 읽을 수 없습니다. 콘솔 로그를 확인해주세요.")
         }
         val actionParser = ActionParser(customItems)
-        for ((platform, rawRewards) in config.rewardsByPlatform) {
-            if (platformFilter != null && platform != platformFilter) {
-                continue
-            }
-            val parsedRewards = rewardParser.parse(platform, rawRewards)
-            parsedRewards.disabledRewards.forEach { disabled ->
+        val platforms = platformFilter?.let { listOf(it.lowercase()) }
+            ?: (config.rewardsByPlatform.keys + streamerConfig.platforms(playerUuid)).distinct()
+        for (platform in platforms) {
+            val streamerRewards = streamerConfig.rewards(playerUuid, platform)
+            val defaultRewards = if (streamerOnly) emptyList() else config.rewardsByPlatform[platform].orEmpty()
+            val selection = rewardSelector.select(
+                platform = platform,
+                amount = amount,
+                streamerRewards = streamerRewards,
+                defaultRewards = defaultRewards,
+            ) { source, disabled ->
                 logger?.warning(
-                    "REWARD_DISABLED platform=$platform rewardId=${disabled.id} reason=${disabled.reason}",
+                    "REWARD_DISABLED source=${source.name.lowercase()} platform=$platform " +
+                        "rewardId=${disabled.id} reason=${disabled.reason}",
                 )
             }
-            val reward = rewardMatcher.match(parsedRewards.rewards, amount)
-            if (reward == null) {
+            if (selection == null) {
                 logger?.debug(
                     "§e[대기] 후원 reward 매칭 실패: platform=$platform player=$playerName " +
-                        "donator=$donatorName amount=$amount rewards=${parsedRewards.rewards.size} " +
-                        "rules=${parsedRewards.rewards.joinToString(",") { it.amountRule.describe() }.ifBlank { "none" }}",
+                        "donator=$donatorName amount=$amount streamerRewards=${streamerRewards.size} " +
+                        "defaultRewards=${defaultRewards.size}",
                 )
                 continue
             }
+            val reward = selection.reward
+            val source = selection.source.name.lowercase()
             val parsedActions = actionParser.parse(reward.actions)
             parsedActions.disabledActions.forEach { disabled ->
                 logger?.warning(
-                    "ACTION_DISABLED platform=$platform rewardId=${reward.id} actionIndex=${disabled.index} actionType=${disabled.type} reason=${disabled.reason}",
+                    "ACTION_DISABLED source=$source platform=$platform rewardId=${reward.id} " +
+                        "actionIndex=${disabled.index} actionType=${disabled.type} reason=${disabled.reason}",
                 )
             }
             if (parsedActions.actions.isEmpty()) {
-                logger?.warning("REWARD_NO_EXECUTABLE_ACTION platform=$platform rewardId=${reward.id}")
+                logger?.warning("REWARD_NO_EXECUTABLE_ACTION source=$source platform=$platform rewardId=${reward.id}")
                 return ManualRewardApplyResult.Failure("선택된 reward에 실행 가능한 action이 없습니다. reward=${reward.id}")
             }
 
@@ -113,6 +176,7 @@ class ManualRewardApplier(
                     platform = platform,
                     donatorName = donatorName,
                     amount = amount,
+                    unitCount = reward.unitCount(amount),
                     message = message,
                     rewardId = reward.id,
                 ),
@@ -122,7 +186,8 @@ class ManualRewardApplier(
             val failed = results.filterNot { it.success }
             failed.forEachIndexed { index, result ->
                 logger?.warning(
-                    "ACTION_EXECUTION_FAILED platform=$platform rewardId=${reward.id} actionIndex=$index actionType=${result.actionType} reason=${result.message}",
+                    "ACTION_EXECUTION_FAILED source=$source platform=$platform rewardId=${reward.id} " +
+                        "actionIndex=$index actionType=${result.actionType} reason=${result.message}",
                 )
             }
             return if (failed.isEmpty()) {
@@ -132,16 +197,13 @@ class ManualRewardApplier(
             }
         }
 
-        return ManualRewardApplyResult.Failure("금액 ${amount}에 맞는 reward가 없습니다.")
-    }
-
-    private fun AmountRule.describe(): String {
-        return when (this) {
-            is AmountRule.Exact -> amount.toString()
-            is AmountRule.Range -> "$minimum-$maximum"
-            is AmountRule.Plus -> "$minimum+"
+        return if (streamerOnly) {
+            ManualRewardApplyResult.Failure("금액 ${amount}에 맞는 스트리머 전용 reward가 없습니다.")
+        } else {
+            ManualRewardApplyResult.Failure("금액 ${amount}에 맞는 reward가 없습니다.")
         }
     }
+
 }
 
 sealed class ManualRewardApplyResult {

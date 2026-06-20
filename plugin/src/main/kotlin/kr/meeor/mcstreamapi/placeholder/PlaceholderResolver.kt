@@ -10,8 +10,9 @@ class PlaceholderResolver(
         context: PlaceholderContext,
         eventState: PlaceholderEventState = PlaceholderEventState(),
         customItems: Map<String, Map<String, Any?>> = emptyMap(),
+        gameValueRenderer: (String) -> String = { it },
     ): String {
-        return resolveDetailed(template, context, eventState, customItems).value
+        return resolveDetailed(template, context, eventState, customItems, gameValueRenderer).value
     }
 
     fun resolveDetailed(
@@ -19,11 +20,12 @@ class PlaceholderResolver(
         context: PlaceholderContext,
         eventState: PlaceholderEventState = PlaceholderEventState(),
         customItems: Map<String, Map<String, Any?>> = emptyMap(),
+        gameValueRenderer: (String) -> String = { it },
     ): PlaceholderResolution {
         val randomAmounts = mutableListOf<Int>()
         val value = PLACEHOLDER_PATTERN.replace(template) { match ->
             val key = match.groupValues[1]
-            resolveToken(key, context, eventState, randomAmounts, customItems) ?: match.value
+            resolveToken(key, context, eventState, randomAmounts, customItems, gameValueRenderer) ?: match.value
         }
         return PlaceholderResolution(value = value, randomAmounts = randomAmounts)
     }
@@ -34,21 +36,27 @@ class PlaceholderResolver(
         eventState: PlaceholderEventState,
         randomAmounts: MutableList<Int>,
         customItems: Map<String, Map<String, Any?>>,
+        gameValueRenderer: (String) -> String,
     ): String? {
         return when {
             key.startsWith("random_once.") -> {
                 val reference = RandomReference.parse(key.removePrefix("random_once."))
                 val selection = randomResolver.resolveEntry(reference.key)?.toSelection() ?: return null
-                resolveRandomProperty(reference, selection, eventState, randomAmounts, customItems)
+                resolveRandomProperty(reference, selection, eventState, randomAmounts, customItems, gameValueRenderer)
             }
             key.startsWith("random.") -> {
                 val reference = RandomReference.parse(key.removePrefix("random."))
                 val selection = eventState.cachedRandomSelection(reference.key) {
                     randomResolver.resolveEntry(reference.key)
                 } ?: return null
-                resolveRandomProperty(reference, selection, eventState, randomAmounts, customItems)
+                resolveRandomProperty(reference, selection, eventState, randomAmounts, customItems, gameValueRenderer)
             }
-            key.startsWith("item.") -> resolveItemToken(key.removePrefix("item."), eventState, customItems)
+            key.startsWith("item.") -> resolveItemToken(
+                key.removePrefix("item."),
+                eventState,
+                customItems,
+                gameValueRenderer,
+            )
             else -> standardValue(key, context)
         }
     }
@@ -59,17 +67,21 @@ class PlaceholderResolver(
         eventState: PlaceholderEventState,
         randomAmounts: MutableList<Int>,
         customItems: Map<String, Map<String, Any?>>,
+        gameValueRenderer: (String) -> String,
     ): String? {
         return when (reference.property) {
             RandomProperty.VALUE -> {
                 selection.resolvedAmount?.let(randomAmounts::add)
-                selection.value
+                if (selection.value.toCustomItemKey() == null) gameValueRenderer(selection.value) else selection.value
             }
-            RandomProperty.DISPLAY -> selection.display ?: selection.value
+            RandomProperty.DISPLAY -> selection.display ?: gameValueRenderer(selection.value)
             RandomProperty.AMOUNT -> (selection.resolvedAmount ?: 1).toString()
             RandomProperty.ITEM_NAME -> {
                 val itemKey = selection.value.toCustomItemKey() ?: return null
-                customItems[itemKey]?.get("name")?.toString() ?: itemKey
+                val item = customItems[itemKey]
+                item?.get("name")?.toString()
+                    ?: item?.get("material")?.toString()?.let(gameValueRenderer)
+                    ?: itemKey
             }
             RandomProperty.ITEM_AMOUNT -> {
                 val itemKey = selection.value.toCustomItemKey() ?: return null
@@ -85,11 +97,14 @@ class PlaceholderResolver(
         reference: String,
         eventState: PlaceholderEventState,
         customItems: Map<String, Map<String, Any?>>,
+        gameValueRenderer: (String) -> String,
     ): String? {
         val itemReference = ItemReference.parse(reference) ?: return null
         val item = customItems[itemReference.key] ?: return null
         return when (itemReference.property) {
-            ItemProperty.NAME -> item["name"]?.toString() ?: itemReference.key
+            ItemProperty.NAME -> item["name"]?.toString()
+                ?: item["material"]?.toString()?.let(gameValueRenderer)
+                ?: itemReference.key
             ItemProperty.AMOUNT -> {
                 val amount = eventState.cachedCustomItemAmount(itemReference.key) {
                     ActionQuantity.parse(item["amount"], default = 1).getOrNull()?.resolve()
@@ -107,6 +122,7 @@ class PlaceholderResolver(
             "platform", "streamer_platform" -> context.platform
             "donator", "donator_name" -> context.donatorName
             "amount", "donation_amount" -> context.amount.toString()
+            "unit_count" -> context.unitCount.toString()
             "message", "donation_message" -> context.message.orEmpty()
             "reward", "reward_id" -> context.rewardId
             else -> null

@@ -122,10 +122,11 @@ class ActionExecutor(
     }
 
     private fun resolveGiveAmount(context: ActionContext, action: Action.Give): Int {
-        val customItemKey = action.customItemKey ?: return action.amount.resolve()
+        val resolveAmount = { action.amount.resolve { render(context, it) } }
+        val customItemKey = action.customItemKey ?: return resolveAmount()
         return context.placeholderEventState.cachedCustomItemAmount(customItemKey) {
-            action.amount.resolve()
-        } ?: action.amount.resolve()
+            resolveAmount()
+        } ?: resolveAmount()
     }
 
     private fun executeDynamicCustomGive(context: ActionContext, action: Action.DynamicCustomGive): ActionExecutionResult {
@@ -153,7 +154,7 @@ class ActionExecutor(
             return ActionExecutionResult.failure("chat", "PLAYER_OFFLINE")
         }
 
-        return if (platform.sendPrivateMessage(context.playerName, render(context, action.message))) {
+        return if (platform.sendPrivateMessage(context.playerName, renderMessage(context, action.message))) {
             ActionExecutionResult.success("chat")
         } else {
             ActionExecutionResult.failure("chat", "MESSAGE_FAILED")
@@ -161,7 +162,7 @@ class ActionExecutor(
     }
 
     private fun executeBroadcast(context: ActionContext, action: Action.Broadcast): ActionExecutionResult {
-        platform.broadcast(render(context, action.message))
+        platform.broadcast(renderMessage(context, action.message))
         return ActionExecutionResult.success("broadcast")
     }
 
@@ -173,8 +174,8 @@ class ActionExecutor(
 
         platform.sendTitle(
             playerName = target,
-            title = render(context, action.title),
-            subtitle = action.subtitle?.let { render(context, it) },
+            title = renderMessage(context, action.title),
+            subtitle = action.subtitle?.let { renderMessage(context, it) },
             fadeInTicks = action.fadeInTicks,
             stayTicks = action.stayTicks,
             fadeOutTicks = action.fadeOutTicks,
@@ -184,6 +185,17 @@ class ActionExecutor(
 
     private fun render(context: ActionContext, value: String): String {
         return renderDetailed(context, value).value
+    }
+
+    private fun renderMessage(context: ActionContext, value: String): String {
+        val placeholderContext = context.placeholderContext ?: return value
+        return placeholderResolver?.resolveDetailed(
+            template = value,
+            context = placeholderContext,
+            eventState = context.placeholderEventState,
+            customItems = context.customItems,
+            gameValueRenderer = platform::localizeGameValue,
+        )?.value ?: value
     }
 
     private fun renderDetailed(context: ActionContext, value: String): PlaceholderResolution {

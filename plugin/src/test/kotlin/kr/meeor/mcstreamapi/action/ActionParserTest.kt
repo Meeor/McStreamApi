@@ -6,6 +6,38 @@ import kotlin.test.assertIs
 
 class ActionParserTest {
     @Test
+    fun `parses placeholder give amount as dynamic quantity`() {
+        val result = ActionParser().parse(
+            listOf(
+                mapOf(
+                    "type" to "give",
+                    "material" to "DIAMOND",
+                    "amount" to "{unit_count}",
+                ),
+            ),
+        )
+
+        val action = assertIs<Action.Give>(result.actions.single())
+        assertEquals(ActionQuantity.Dynamic("{unit_count}"), action.amount)
+    }
+
+    @Test
+    fun `parses unit count arithmetic as dynamic quantity`() {
+        val result = ActionParser().parse(
+            listOf(
+                mapOf(
+                    "type" to "give",
+                    "material" to "DIAMOND",
+                    "amount" to "{unit_count+5}",
+                ),
+            ),
+        )
+
+        val action = assertIs<Action.Give>(result.actions.single())
+        assertEquals(ActionQuantity.Dynamic("{unit_count+5}"), action.amount)
+    }
+
+    @Test
     fun `parses supported action types`() {
         val result = ActionParser().parse(
             listOf(

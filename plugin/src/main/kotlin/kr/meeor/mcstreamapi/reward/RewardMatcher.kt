@@ -15,8 +15,14 @@ class RewardMatcher(
 
         val highestPriority = candidates.maxOf { it.amountRule.priority }
         val samePriority = candidates.filter { it.amountRule.priority == highestPriority }
+        val mostSpecific = if (samePriority.first().amountRule is AmountRule.Plus) {
+            val highestMinimum = samePriority.maxOf { (it.amountRule as AmountRule.Plus).minimum }
+            samePriority.filter { (it.amountRule as AmountRule.Plus).minimum == highestMinimum }
+        } else {
+            samePriority
+        }
 
-        return weightedPick(samePriority)
+        return weightedPick(mostSpecific)
     }
 
     private fun weightedPick(rewards: List<Reward>): Reward {

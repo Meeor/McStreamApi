@@ -1,0 +1,56 @@
+# 모든 스트리머에게 공통으로 적용할 후원 보상입니다.
+# 플랫폼별로 보상 목록을 작성합니다. chzzk 금액은 원, soop 금액은 별풍선 개수입니다.
+rewards:
+  chzzk:
+    # amount: "1000"(정확히), "1000-5000"(범위), "5000+"(이상)
+    # chance는 같은 우선순위 후보 사이의 가중치이며 생략 시 100, 0 이하는 제외됩니다.
+    - id: "chzzk_1000"
+      amount: "1000"
+      chance: 100
+      actions:
+        # 메시지는 &a 같은 색상, &l 굵게, &r 초기화, &#RRGGBB HEX를 지원합니다.
+        # &l 뒤의 굵게는 색상이 바뀌어도 유지되며 &r을 넣을 때 해제됩니다.
+        - type: "broadcast"
+          message: "&a{donator}님이 {streamer}에게 {amount}원을 후원했습니다."
+        # target 기본값 @s는 후원을 받는 인증된 Minecraft 플레이어입니다.
+        - type: "give"
+          target: "@s"
+          material: "APPLE"
+          amount: 1
+        # 복잡한 아이템은 custom-item.yml의 키를 {item.키}로 참조합니다.
+        - type: "custom-give"
+          target: "@s"
+          item: "{item.donation_diamond}"
+
+    - id: "chzzk_monster"
+      amount: "5000+"
+      chance: 70
+      actions:
+        # {random.키}는 한 이벤트 안에서 같은 값을 유지합니다.
+        - type: "summon"
+          entity: "{random.monster_random}"
+        - type: "sound"
+          sound: "minecraft:entity.player.levelup"
+          source: "master"
+          volume: 1.0
+          pitch: 1.0
+
+    - id: "chzzk_rare_bonus"
+      amount: "5000+"
+      chance: 30
+      actions:
+        - type: "give"
+          target: "@s"
+          material: "EMERALD"
+          amount: 1
+        - type: "custom-give"
+          target: "@s"
+          item: "{item.rare_emerald}"
+
+  soop:
+    - id: "soop_1000"
+      amount: "1000"
+      chance: 100
+      actions:
+        - type: "broadcast"
+          message: "&b{donator}님이 SOOP에서 {amount}원을 후원했습니다."

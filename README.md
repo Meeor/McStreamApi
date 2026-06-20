@@ -50,7 +50,7 @@ auth-server/build/libs/McStreamApi-AuthServer-<version>.jar
 1. `plugin/build/libs/McStreamApi-<version>.jar`를 Paper/Spigot 서버의 `plugins/` 폴더에 넣습니다.
 2. 서버를 한 번 실행합니다.
 3. `plugins/McStreamApi/`에 기본 설정 파일이 생성되면 서버를 종료합니다.
-4. `config.yml`, `Api.yml`, `random.yml`, `custom-item.yml`을 수정합니다.
+4. `config.yml`, `Api.yml`, `random.yml`, `custom-item.yml`을 수정합니다. `streamer-rewards.yml`은 `streamerRewards.enabled: true`일 때 생성됩니다.
 5. 서버를 다시 실행합니다.
 
 최초 실행 때는 기본 설정만 생성하고 런타임 기능은 비활성화됩니다. 실제 OAuth 값과 `sharedSecret`을 설정한 뒤 다시 시작해야 합니다.
@@ -195,18 +195,20 @@ curl https://auth.example.com/mca/ready
 /mca connect <chzzk|soop>
 /mca reload
 /mca apply <player> <amount> [chzzk|soop]
+/mca apply-streamer <player> <amount> [chzzk|soop]
 /mca status
 ```
 
 `/mca connect`는 플레이어만 사용할 수 있습니다. 인증 URL은 클릭 가능한 `[연결하러 가기]` 텍스트로 표시되고, pairing code는 콘솔 로그에만 남습니다.
 `/mca apply`는 수동 테스트용 보상 적용 명령어입니다. 대상 플레이어가 한 플랫폼에만 연결되어 있으면 플랫폼을 생략할 수 있고, 연결 토큰이 없거나 Chzzk/SOOP 둘 다 연결되어 있으면 `chzzk` 또는 `soop`을 직접 지정해야 합니다.
+`/mca apply-streamer`는 `streamer-rewards.yml`의 전용 보상만 테스트합니다. 저장된 UUID는 Mojang 프로필 조회 결과로 플레이어 이름 자동완성에 표시되며, 조회 전이나 실패 시 UUID가 표시됩니다. 전용 플랫폼이 하나면 플랫폼을 생략할 수 있습니다.
 
 권한:
 
 | 권한 | 설명 |
 | --- | --- |
 | `mcstreamapi.reload` | `/mca reload` |
-| `mcstreamapi.apply` | `/mca apply` |
+| `mcstreamapi.apply` | `/mca apply`, `/mca apply-streamer` |
 | `mcstreamapi.status` | `/mca status` |
 
 콘솔은 관리 명령어 권한 검사 없이 사용할 수 있습니다.
@@ -223,6 +225,8 @@ rewards:
         - type: "broadcast"
           message: "&a{donator}님이 {streamer}에게 {amount}원을 후원했습니다."
 ```
+
+플레이어 UUID별 전용 보상은 `config.yml`의 `streamerRewards.enabled`를 `true`로 설정하면 자동 생성되는 `streamer-rewards.yml`에 정의할 수 있습니다. `false`이면 파일을 생성하거나 읽지 않습니다. 전용 보상이 실제로 매칭되지 않으면 `Api.yml` 기본 보상으로 폴백합니다. 자세한 형식은 [docs/streamer-rewards-yml.md](docs/streamer-rewards-yml.md)를 참고하세요.
 
 `amount` 형식:
 
@@ -265,12 +269,18 @@ Placeholder:
 {platform}
 {donator}
 {amount}
+{unit_count}
 {message}
 {random.key}
 {random_once.key}
 ```
 
+메시지 계열 액션은 `&a` 같은 레거시 색상 코드와 `&#12ABEF` 형식의 HEX 색상 코드를 지원합니다.
+
 `random.yml` 형식과 `{random.key}` / `{random_once.key}` 차이는 [docs/random-yml.md](docs/random-yml.md)를 참고하세요.
+`unitAmount`를 지정하면 `{unit_count}`에 후원 수량을 기준 단위로 나눈 정수 몫이 들어갑니다. 자세한 형식은 [docs/api-yml.md](docs/api-yml.md)를 참고하세요.
+`bonusAmount`와 `bonusCount`를 함께 지정하면 보너스 구간마다 추가 수량을 누적할 수 있습니다.
+액션 수량에는 `{unit_count+5}` / `{unit_count-1}`처럼 고정 보너스 연산도 사용할 수 있습니다.
 
 ## Troubleshooting
 
@@ -303,7 +313,7 @@ Chzzk callback 실패:
 
 ## 보안
 
-- 실제 `config.yml`, `Api.yml`, `random.yml`, `custom-item.yml`, `secret.key`, `tokens/`는 Git에 올리지 않습니다.
+- 실제 `config.yml`, `Api.yml`, `streamer-rewards.yml`, `random.yml`, `custom-item.yml`, `secret.key`, `tokens/`는 Git에 올리지 않습니다.
 - AuthServer 포트는 외부에 직접 열지 말고 Nginx/HTTPS 뒤에 둡니다.
 - 로그와 오류 응답은 token/clientSecret/sharedSecret을 직접 출력하지 않도록 테스트되어 있습니다.
 - 공개 전 `rg "clientSecret|sharedSecret|accessToken|refreshToken"`로 한 번 더 확인하세요.

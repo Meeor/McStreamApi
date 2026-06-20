@@ -24,6 +24,74 @@ rewards:
 `chzzk`의 `amount`는 원 단위입니다. `soop`의 별풍 이벤트 `amount`는 별풍선 개수입니다.
 
 정확한 금액 조건이 range보다 우선하고, range가 plus보다 우선합니다.
+여러 plus 조건이 동시에 맞으면 기준값이 가장 큰 조건만 선택합니다. 예를 들어 `100+`와 `1000+`가 있으면 1000 이상에서는 `1000+`만 후보가 됩니다.
+
+## unitAmount
+
+`unitAmount`를 지정하면 선택된 reward에서 `{unit_count}`를 `amount / unitAmount`의 정수 몫으로 계산합니다.
+
+```yml
+- id: "soop_per_100"
+  amount: "100+"
+  unitAmount: 100
+  actions:
+    - type: "give"
+      target: "@s"
+      material: "DIAMOND"
+      amount: "{unit_count}"
+    - type: "broadcast"
+      message: "{donator}님 후원 보상 {unit_count}개 지급"
+```
+
+- 100개: `{unit_count}` = 1
+- 250개: `{unit_count}` = 2
+- 300개: `{unit_count}` = 3
+- 나머지는 버립니다.
+- `unitAmount`는 1 이상의 정수여야 합니다.
+- `unitAmount`를 생략하면 `{unit_count}`는 1입니다.
+
+## bonusAmount / bonusCount
+
+기준 수량에 구간별 보너스를 누적하려면 `bonusAmount`와 `bonusCount`를 함께 지정합니다.
+
+```yml
+- id: "soop_coin"
+  amount: "100+"
+  unitAmount: 100
+  bonusAmount: 1000
+  bonusCount: 1
+  actions:
+    - type: "give"
+      material: "GOLD_NUGGET"
+      amount: "{unit_count}"
+```
+
+계산식은 `(amount / unitAmount) + (amount / bonusAmount * bonusCount)`이며 각 나눗셈의 나머지는 버립니다.
+
+- 100개: 1개
+- 300개: 3개
+- 500개: 5개
+- 1000개: 11개
+- 5000개: 55개
+- 10000개: 110개
+
+`bonusAmount`와 `bonusCount`는 반드시 함께 지정해야 하며 모두 1 이상의 정수여야 합니다. 보너스 설정에는 `unitAmount`도 필요합니다.
+
+액션 수량에서는 `{unit_count+N}` 또는 `{unit_count-N}`으로 고정 보너스를 더하거나 뺄 수 있습니다.
+
+```yml
+- id: "soop_5000"
+  amount: "5000"
+  unitAmount: 100
+  actions:
+    - type: "give"
+      material: "GOLD_NUGGET"
+      amount: "{unit_count+5}" # 5000 / 100 + 5 = 55
+```
+
+계산 결과는 1 이상의 정수여야 합니다.
+
+예를 들어 `amount: "1000"`인 고정보상이 별도로 있으면 정확한 금액 조건이 우선하므로, 1000개에는 `amount: "100+"` 보상이 중복 실행되지 않습니다.
 
 ## chance
 
@@ -37,9 +105,13 @@ rewards:
       message: "항상 실행"
 ```
 
-동일 우선순위의 reward가 여러 개면 chance 가중치로 하나만 선택됩니다. `chance <= 0`인 reward는 후보에서 제외됩니다.
+동일 조건의 reward가 여러 개면 chance 가중치로 하나만 선택됩니다. `chance <= 0`인 reward는 후보에서 제외됩니다.
 
 ## actions
+
+메시지, 타이틀, 아이템 이름과 lore에는 `&a`, `&l`, `&r` 같은 레거시 색상 코드와 `&#12ABEF` 형식의 HEX 색상 코드를 사용할 수 있습니다. `&l` 굵게는 뒤에서 색상 코드가 바뀌어도 유지되며 `&r`에서 해제됩니다.
+
+`chat`, `broadcast`, `title` 안의 랜덤 아이템·몹·버프 값은 Minecraft 번역 키로 전송되어 각 플레이어의 클라이언트 언어로 표시됩니다. 명령어, 소환, 지급에 쓰는 내부 ID는 번역하지 않습니다. `random.yml` 항목에 `display`를 직접 작성하면 해당 문구가 우선합니다.
 
 ### cmd
 
@@ -224,6 +296,7 @@ amount: "<..100>" # 1~100 중 랜덤
 - `{platform}`: 플랫폼
 - `{donator}`: 후원자 이름
 - `{amount}`: 후원 금액
+- `{unit_count}`: `amount / unitAmount`로 계산한 보상 수량
 - `{message}`: 후원 메시지
 - `{random.key}`: 같은 이벤트 안에서 같은 랜덤값 유지
 - `{random_once.key}`: 호출마다 새 랜덤값 선택

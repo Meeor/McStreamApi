@@ -278,6 +278,15 @@ amount 사용.
 2. Range Match
 3. Plus Match
 
+전용 보상을 활성화한 경우 출처까지 포함한 우선순위:
+
+1. 전용 Exact
+2. 공용 Exact
+3. 전용 Range
+4. 공용 Range
+5. 전용 Plus
+6. 공용 Plus
+
 예:
 
 amount: 1000
@@ -1181,11 +1190,14 @@ Chzzk/SOOP 후원 이벤트 처리는 가능한 경우 플랫폼 공식 WebSocke
 
 매칭 우선순위:
 
-1. Exact Match
-2. Range Match
-3. Plus Match
+1. 전용 Exact Match
+2. 공용 Exact Match
+3. 전용 Range Match
+4. 공용 Range Match
+5. 전용 Plus Match
+6. 공용 Plus Match
 
-동일 우선순위에서 여러 개가 매칭되면 `chance` 가중치로 Reward 1개를 선택한다.
+동일 단계에서 여러 개가 매칭되면 `chance` 가중치로 Reward 1개를 선택한다.
 
 잘못된 amount 문법:
 
@@ -1206,7 +1218,7 @@ Chzzk/SOOP 후원 이벤트 처리는 가능한 경우 플랫폼 공식 WebSocke
 Reward 선택:
 
 - amount 우선순위로 후보 Reward를 먼저 고른다.
-- 같은 우선순위 후보 안에서 `chance` 가중치로 1개를 선택한다.
+- 같은 단계의 후보 안에서 `chance` 가중치로 1개를 선택한다.
 - `chance`가 없는 Reward는 `chance: 100`으로 본다.
 - `chance <= 0`인 Reward는 선택 후보에서 제외한다.
 - 후보들의 chance 총합이 100일 필요는 없다.

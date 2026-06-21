@@ -1,41 +1,58 @@
-# 인증 서버 연결 설정입니다. 서버 주소와 sharedSecret은 AuthServer 설정과 같아야 합니다.
+# McStreamApi 기본 설정
+# 표기: [필수] 반드시 설정 / [선택] 생략 가능 / [현재 미사용] 적어도 동작에 반영되지 않음
+
 auth:
+  # [필수] AuthServer의 외부 접속 주소. 플레이어 OAuth 연결과 페어링 조회에 사용합니다.
   serverBaseUrl: "https://auth.example.com/mca"
+  # [필수] AuthServer security.sharedSecret과 같은 32자 이상의 값. generate_shared_secret.py로 생성합니다.
   sharedSecret: "CHANGE_ME_RANDOM_LONG_SECRET"
+  # [선택, 기본값: 3, 최소: 1] 페어링 완료 여부를 AuthServer에 다시 묻는 간격(초)입니다.
   pollingIntervalSeconds: 3
+  # [선택, 기본값: 600, 최소: 30] 플레이어 페어링을 기다리는 최대 시간(초)입니다.
   pairingTimeoutSeconds: 600
 
-# 토큰 갱신 실패 시 재시도 횟수와 간격(초)입니다.
 token:
+  # [현재 미사용] 향후 토큰 갱신 재시도 횟수용 예약 값입니다.
   maxRefreshRetries: 3
+  # [현재 미사용] 향후 토큰 갱신 재시도 간격용 예약 값입니다.
   refreshRetryDelaySeconds: 3
 
-# 플레이어 UUID별 전용 보상 기능입니다.
-# false이면 streamer-rewards.yml을 생성하거나 읽지 않고 Api.yml의 공용 보상만 사용합니다.
-# true로 변경한 뒤 서버를 시작하면 streamer-rewards.yml이 자동 생성됩니다.
 streamerRewards:
+  # [선택, 기본값: false] true면 UUID별 streamer-rewards.yml을 생성하고 전용 보상을 읽습니다.
+  # false면 파일을 생성하거나 읽지 않고 Api.yml 공용 보상만 사용합니다.
   enabled: false
 
-# 사용할 후원 플랫폼별 OAuth 및 이벤트 수신 설정입니다.
 platforms:
   chzzk:
+    # [선택, 기본값: false] 치지직 후원 수신 사용 여부입니다. true면 아래 ID와 Secret이 필수입니다.
     enabled: true
+    # [enabled=true일 때 필수] 치지직 OAuth 애플리케이션 Client ID입니다.
     clientId: "CHZZK_CLIENT_ID"
+    # [enabled=true일 때 필수] 치지직 OAuth 애플리케이션 Client Secret입니다.
     clientSecret: "CHZZK_CLIENT_SECRET"
+    # [현재 미사용] 향후 이벤트 폴링 간격용 예약 값입니다.
     eventPollingIntervalSeconds: 5
+    # [선택, 기본값: 300, 최소: 30] 만료 몇 초 전에 치지직 토큰을 갱신할지 정합니다.
     tokenRefreshBeforeSeconds: 300
 
   soop:
+    # [선택, 기본값: false] SOOP 후원 수신 사용 여부입니다. true면 아래 ID와 Secret이 필수입니다.
     enabled: true
+    # [enabled=true일 때 필수] SOOP OAuth 애플리케이션 Client ID입니다.
     clientId: "SOOP_CLIENT_ID"
+    # [enabled=true일 때 필수] SOOP OAuth 애플리케이션 Client Secret입니다.
     clientSecret: "SOOP_CLIENT_SECRET"
+    # [현재 미사용] 향후 이벤트 폴링 간격용 예약 값입니다.
     eventPollingIntervalSeconds: 5
+    # [선택, 기본값: 300, 최소: 30] 만료 몇 초 전에 SOOP 토큰을 갱신할지 정합니다.
     tokenRefreshBeforeSeconds: 300
-    # 광고/영상 별풍선 이벤트도 일반 후원 이벤트로 받을지 설정합니다.
+    # [선택, 기본값: false] 광고/애드벌룬 계열 별풍선도 일반 후원으로 처리합니다.
     receiveAdBalloons: false
+    # [선택, 기본값: false] 영상풍 별풍선도 일반 후원으로 처리합니다.
     receiveVideoBalloons: false
 
-# debug는 상세 로그, maskSensitiveValues는 토큰/비밀값 마스킹 여부입니다.
 logging:
+  # [선택, 기본값: false] 연결·수신·매칭 과정의 상세 로그를 출력합니다.
   debug: false
+  # [현재 미사용] 민감값은 현재 설정과 관계없이 로그에 직접 출력하지 않습니다.
   maskSensitiveValues: true

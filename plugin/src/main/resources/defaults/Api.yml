@@ -1,56 +1,117 @@
-# 모든 스트리머에게 공통으로 적용할 후원 보상입니다.
-# 플랫폼별로 보상 목록을 작성합니다. chzzk 금액은 원, soop 금액은 별풍선 개수입니다.
-rewards:
-  chzzk:
-    # amount: "1000"(정확히), "1000-5000"(범위), "5000+"(이상)
-    # chance는 같은 우선순위 후보 사이의 가중치이며 생략 시 100, 0 이하는 제외됩니다.
-    - id: "chzzk_1000"
-      amount: "1000"
-      chance: 100
-      actions:
-        # 메시지는 &a 같은 색상, &l 굵게, &r 초기화, &#RRGGBB HEX를 지원합니다.
-        # &l 뒤의 굵게는 색상이 바뀌어도 유지되며 &r을 넣을 때 해제됩니다.
-        - type: "broadcast"
-          message: "&a{donator}님이 {streamer}에게 {amount}원을 후원했습니다."
-        # target 기본값 @s는 후원을 받는 인증된 Minecraft 플레이어입니다.
-        - type: "give"
-          target: "@s"
-          material: "APPLE"
-          amount: 1
-        # 복잡한 아이템은 custom-item.yml의 키를 {item.키}로 참조합니다.
-        - type: "custom-give"
-          target: "@s"
-          item: "{item.donation_diamond}"
+﻿# 공용 후원 보상 설정
+# chzzk amount는 원, soop amount는 별풍선 개수입니다.
+# 조건 형식: "1000"=정확히 / "1000-5000"=양 끝 포함 범위 / "5000+"=이상
+# 선택 순서: 전용 고정 > 공용 고정 > 전용 범위 > 공용 범위 > 전용 플러스 > 공용 플러스
+# 후원 이벤트 하나에는 보상 하나만 실행됩니다. 같은 단계 후보는 chance 가중치로 하나를 뽑습니다.
+# 문자열에서 사용 가능: &a 색상, &l 굵게, &r 초기화, &#12ABEF HEX
+# 공통 placeholder: {player}, {player_uuid}, {streamer}, {platform}, {donator}, {amount}, {message}, {unit_count}
+# 랜덤 placeholder: {random.키}, {random.키.value}, {random.키.display}, {random.키.amount}
+# 랜덤 커스텀 아이템: {random.키.item.name}, {random.키.item.amount}
+# random_once도 같은 속성을 지원하지만 호출할 때마다 다시 뽑습니다: {random_once.키.item.name}
+# 직접 지정한 커스텀 아이템: {item.키}, {item.키.name}, {item.키.amount}
 
-    - id: "chzzk_monster"
-      amount: "5000+"
-      chance: 70
-      actions:
-        # {random.키}는 한 이벤트 안에서 같은 값을 유지합니다.
-        - type: "summon"
-          entity: "{random.monster_random}"
-        - type: "sound"
-          sound: "minecraft:entity.player.levelup"
-          source: "master"
-          volume: 1.0
-          pitch: 1.0
+# rewards:
+#   chzzk:
+#     - id: "chzzk_1000" # [선택, 권장] 로그에서 보상을 구분할 이름. 생략하면 플랫폼#순번을 사용합니다.
+#       amount: "1000"   # [필수] 이 보상이 매칭될 후원 금액 조건입니다.
+#       chance: 100       # [선택, 기본값: 100] 같은 단계 후보의 가중치. 0 이하는 선택에서 제외됩니다.
+#       actions:          # [필수] 순서대로 실행할 액션이며 하나 이상 필요합니다.
+#         - type: "broadcast" # [필수] 모든 온라인 플레이어에게 메시지를 보냅니다.
+#           message: "&a{donator}님이 {streamer}에게 {amount}원을 후원했습니다." # [필수]
+#         - type: "give"      # 간단한 아이템 지급. 복잡한 meta는 custom-give를 사용합니다.
+#           target: "@s"      # [선택, 기본값: @s] @s는 후원을 받은 Minecraft 플레이어입니다.
+#           material: "APPLE" # [필수] Bukkit Material 또는 minecraft:apple 형식입니다.
+#           amount: 1          # [선택, 기본값: 1] 숫자, "<1..3>", {unit_count}, {unit_count+N}을 지원합니다.
+#           name: "&c후원 사과" # [선택] 지급 아이템 이름입니다.
+#           lore:                # [선택] 지급 아이템 설명입니다.
+#             - "&7후원자: {donator}"
 
-    - id: "chzzk_rare_bonus"
-      amount: "5000+"
-      chance: 30
-      actions:
-        - type: "give"
-          target: "@s"
-          material: "EMERALD"
-          amount: 1
-        - type: "custom-give"
-          target: "@s"
-          item: "{item.rare_emerald}"
+#     - id: "chzzk_monster"
+#       amount: "5000+"
+#       chance: 70
+#       actions:
+#         - type: "summon"
+#           target: "@s" # [선택, 기본값: @s] 소환 기준 위치입니다.
+#           entity: "{random.monster_random}" # [필수] 엔티티 ID. random.yml amount가 소환 수량입니다.
+#         - type: "sound"
+#           target: "@s" # [선택, 기본값: @s] 소리를 들을 대상/위치입니다.
+#           sound: "minecraft:entity.player.levelup" # [필수] Minecraft 사운드 ID입니다.
+#           source: "master" # [선택, 기본값: master] master/music/record/weather/block/hostile/neutral/player/ambient/voice
+#           volume: 1.0       # [선택, 기본값: 1.0, 최소: 0] 음량입니다.
+#           pitch: 1.0        # [선택, 기본값: 1.0, 최소: 0] 음높이입니다.
 
-  soop:
-    - id: "soop_1000"
-      amount: "1000"
-      chance: 100
-      actions:
-        - type: "broadcast"
-          message: "&b{donator}님이 SOOP에서 {amount}원을 후원했습니다."
+#     - id: "chzzk_rare_bonus"
+#       amount: "5000+"
+#       chance: 30
+#       actions:
+#         - type: "custom-give"
+#           target: "@s" # [선택, 기본값: @s]
+#           item: "{item.rare_emerald}" # [필수] custom-item.yml의 items 키입니다.
+          # amount: 1 # [선택] 적으면 custom-item.yml의 amount만 덮어씁니다.
+
+    # 모든 reward/action 필드 예시입니다. chance: 0이라 기본 상태에서는 절대 실행되지 않습니다.
+    # 필요한 액션을 실제 보상으로 복사해서 사용하세요.
+#     - id: "all_action_examples_disabled"
+#       amount: "100+"    # [필수]
+#       unitAmount: 100    # [선택] {unit_count} 기본값 = amount / unitAmount의 정수 몫
+#       bonusAmount: 1000  # [선택] bonusCount와 반드시 함께 사용. 이 금액 단위마다 보너스를 더합니다.
+#       bonusCount: 1      # [선택] bonusAmount 단위마다 {unit_count}에 더할 수량입니다.
+#       chance: 0          # [선택] 0 이하는 비활성 후보입니다.
+#       actions:
+#         - type: "cmd"
+#           command: "give {player} minecraft:diamond 1" # [필수] 콘솔 위치에서 실행할 명령어. 앞의 /는 쓰지 않습니다.
+#         - type: "at_player_cmd"
+#           command: "summon minecraft:lightning_bolt ~ ~ ~" # [필수] 후원 수신 플레이어 위치에서 실행합니다.
+#         - type: "summon"
+#           target: "@s"
+#           entity: "minecraft:zombie"
+#         - type: "sound"
+#           target: "@s"
+#           sound: "minecraft:entity.player.levelup"
+#           source: "master"
+#           volume: 1.0
+#           pitch: 1.0
+#         - type: "give"
+#           target: "@s"
+#           material: "DIAMOND"
+#           amount: "{unit_count+1}"
+#           name: "&b후원 다이아몬드"
+#           lore:
+#             - "&7후원자: {donator}"
+#             - "&7후원량: {amount}"
+#         - type: "custom-give"
+#           target: "@s"
+#           item: "{item.donation_diamond}"
+#           amount: "<1..3>" # [선택] custom-item.yml 수량을 덮어씁니다.
+#         - type: "chat"
+#           message: "&a후원 감사합니다." # [필수] 후원을 받은 플레이어에게만 표시합니다.
+#         - type: "broadcast"
+#           # 랜덤 일반 값은 display/amount, 랜덤 커스텀 아이템은 item.name/item.amount로 표시합니다.
+#           message: "&e{donator}님의 후원: {random.monster_random.display} {random.monster_random.amount}개 / {random.reward_item_random.item.name} {random.reward_item_random.item.amount}개"
+#         - type: "title"
+#           target: "@s"          # [선택, 기본값: @s]
+#           title: "&e후원 도착"  # [필수]
+#           subtitle: "&f{donator} / {amount}" # [선택]
+#           fadeInTicks: 10        # [선택, 기본값: 10] 나타나는 시간(틱)입니다.
+#           stayTicks: 70          # [선택, 기본값: 70] 유지 시간(틱)입니다.
+#           fadeOutTicks: 20       # [선택, 기본값: 20] 사라지는 시간(틱)입니다.
+
+#   soop:
+#     - id: "soop_100"
+#       amount: "100"
+#       chance: 100
+#       actions:
+#         - type: "broadcast"
+#           message: "&b{donator}님이 {streamer}에게 별풍선 {amount}개를 후원했습니다."
+
+#     - id: "soop_per_100"
+#       amount: "100+"
+#       unitAmount: 100
+#       actions:
+#         - type: "give"
+#           target: "@s"
+#           material: "GOLD_NUGGET"
+#           amount: "{unit_count}"
+
+# 위 예시에서 필요한 부분을 복사한 뒤 주석을 해제해서 사용하세요.
+rewards: {}

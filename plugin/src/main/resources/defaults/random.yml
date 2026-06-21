@@ -1,47 +1,75 @@
-# 액션에서 {random.키} 또는 {random_once.키}로 사용할 랜덤 테이블입니다.
-# random은 한 후원 이벤트 안에서 결과를 재사용하고, random_once는 호출할 때마다 다시 뽑습니다.
-# chat/broadcast/title에서 아이템·몹·버프 값은 플레이어의 클라이언트 언어로 자동 번역됩니다.
-# display를 직접 작성하면 자동 번역 대신 작성한 표시명이 우선합니다.
-monster_random:
-  # 객체 목록은 value(실제 값), chance(가중치), amount(summon 수량), display(표시명)를 지원합니다.
-  # chance 합계는 100일 필요가 없고, 생략 시 100이며 0 이하는 제외됩니다.
-  - value: "zombie"
-    chance: 50
-    amount: 1
-  - value: "skeleton"
-    chance: 30
-    amount: 2
-  - value: "creeper"
-    chance: 20
-    amount: "<1..3>"
+﻿# 랜덤 테이블 설정
+# Api.yml에서 {random.테이블명}으로 쓰면 한 후원 이벤트 동안 같은 결과를 재사용합니다.
+# {random_once.테이블명}은 placeholder가 호출될 때마다 다시 뽑습니다.
+# value는 실제 명령/지급 ID, display는 chat/broadcast/title에 보여줄 이름입니다.
+# 일반 랜덤 속성: {random.키.value}, {random.키.display}, {random.키.amount}
+# 커스텀 아이템 랜덤 속성: {random.키.item.name}, {random.키.item.amount}
+# item.name/item.amount는 value가 반드시 {item.custom-item키} 형식일 때만 사용할 수 있습니다.
 
-animal_random:
-  # 단순 문자열 목록은 각 항목이 같은 기본 가중치(100)를 가집니다.
-  - "cow"
-  - "pig"
-  - "chicken"
+# monster_random:
+  # [필수] value: 실제 엔티티 ID. summon의 entity 등에서 사용합니다.
+  # [선택, 기본값: 100] chance: 선택 가중치. 합계는 100일 필요가 없고 0 이하는 제외됩니다.
+  # [선택, 기본값: 1] amount: summon 횟수. 숫자 또는 "<최소..최대>"입니다.
+  # [선택] display: 메시지 표시명. 생략하면 Minecraft 번역 키로 클라이언트 언어에 맞게 표시합니다.
+#   - value: "minecraft:zombie"
+#     chance: 50
+#     amount: 1
+#     display: "좀비"
+#   - value: "minecraft:skeleton"
+#     chance: 30
+#     amount: 2
+#   - value: "minecraft:creeper"
+#     chance: 20
+#     amount: "<1..3>"
 
-buff_random:
-  - "speed"
-  - "haste"
-  - "strength"
+# 단순 문자열은 value만 적은 축약형이며 각 항목 chance는 100입니다.
+# animal_random:
+#   - "minecraft:cow"
+#   - "minecraft:pig"
+#   - "minecraft:chicken"
 
-debuff_random:
-  - "slowness"
-  - "weakness"
-  - "blindness"
+# 아래 테이블명은 고정 예약어가 아닙니다. 원하는 이름으로 추가하고 {random.이름}으로 참조할 수 있습니다.
+# buff_random:
+#   - "minecraft:speed"
+#   - "minecraft:haste"
+#   - "minecraft:strength"
 
-item_random:
-  - "diamond"
-  - "emerald"
-  - "gold_ingot"
+# debuff_random:
+#   - "minecraft:slowness"
+#   - "minecraft:weakness"
+#   - "minecraft:blindness"
 
-food_random:
-  - "apple"
-  - "bread"
-  - "cooked_beef"
+# item_random:
+#   - value: "minecraft:diamond"
+#     chance: 50
+#     amount: "<1..3>"
+#     display: "다이아몬드"
+#   - value: "minecraft:emerald"
+#     chance: 30
+#     amount: 1
+#   - value: "minecraft:gold_ingot"
+#     chance: 20
+#     amount: 2
 
-ore_random:
-  - "coal_ore"
-  - "iron_ore"
-  - "diamond_ore"
+# custom-item.yml 아이템을 랜덤으로 고르는 예시입니다.
+# random 항목의 amount가 아니라 선택된 custom-item.yml의 name/amount를 사용합니다.
+# reward_item_random:
+#   - value: "{item.donation_diamond}"
+#     chance: 70
+#   - value: "{item.rare_emerald}"
+#     chance: 30
+# Api.yml 메시지: "{random.reward_item_random.item.name} {random.reward_item_random.item.amount}개"
+# Api.yml 지급: item: "{random.reward_item_random}"
+
+# food_random:
+#   - "minecraft:apple"
+#   - "minecraft:bread"
+#   - "minecraft:cooked_beef"
+
+# ore_random:
+#   - "minecraft:coal_ore"
+#   - "minecraft:iron_ore"
+#   - "minecraft:diamond_ore"
+
+# 위 예시에서 필요한 부분을 복사한 뒤 주석을 해제해서 사용하세요.
+{}

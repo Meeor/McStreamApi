@@ -120,11 +120,22 @@ class McaCommandService(
 
         return when (val result = connector.start(sender, platform, authConfig)) {
             is PairingStartResult.Started -> McaCommandResult(
-                message = "인증을 진행하려면 [연결하러 가기]를 클릭하세요.",
+                message = connectStartedMessage(platform, result.pairingCode),
                 clickUrl = result.authorizeUrl,
                 consoleLog = "인증 요청 생성: player=${sender.name} platform=$platform pairingCode=${result.pairingCode}",
             )
             is PairingStartResult.Failure -> McaCommandResult(result.message)
+        }
+    }
+
+    private fun connectStartedMessage(platform: String, pairingCode: String): String {
+        return if (platform == "soop") {
+            listOf(
+                "인증을 진행하려면 [연결하러 가기]를 클릭하세요.",
+                "SOOP 자동 인증이 실패해 사이트에서 코드를 요구하면 다음 코드를 입력하세요: $pairingCode",
+            ).joinToString("\n")
+        } else {
+            "인증을 진행하려면 [연결하러 가기]를 클릭하세요."
         }
     }
 

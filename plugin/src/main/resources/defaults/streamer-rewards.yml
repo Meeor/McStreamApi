@@ -2,7 +2,8 @@
 # config.yml의 streamerRewards.enabled가 true일 때만 생성하고 읽습니다.
 # 내부 reward/action 필드는 Api.yml과 완전히 같습니다.
 # 선택 순서: 전용 고정 > 공용 고정 > 전용 범위 > 공용 범위 > 전용 플러스 > 공용 플러스
-# 후원 이벤트 하나에는 위 순서로 선택된 보상 하나만 실행합니다.
+# 기본적으로 후원 이벤트 하나에는 위 순서로 선택된 보상 하나만 실행합니다.
+# 단, 전용 보상에 allowDuplicate: true를 넣으면 전용 보상 실행 후 매칭되는 공용 보상도 1개 이어서 실행합니다.
 
 # 사용 예시를 복사하고 각 줄 앞의 #을 제거하세요.
 # streamers:
@@ -11,9 +12,10 @@
 #       - id: "personal_chzzk_1000"            # [선택, 권장] 로그에서 구분할 고유 이름
 #         amount: "1000"                       # [필수] 고정/범위/플러스 금액 조건
 #         chance: 100                           # [선택, 기본값: 100] 같은 단계 후보의 가중치
+#         allowDuplicate: true                  # [선택, 기본값: false] 전용 메시지 후 공용 보상도 이어서 실행할 때 true
 #         actions:                              # [필수] Api.yml과 같은 액션 목록
 #           - type: "broadcast"
-#             message: "&a&l전용 보상"
+#             message: "&a&l{streamer}님 전용 메시지"
 #     soop:                                     # [선택] SOOP 전용 보상 목록
 #       - id: "personal_soop_100+"
 #         amount: "100+"

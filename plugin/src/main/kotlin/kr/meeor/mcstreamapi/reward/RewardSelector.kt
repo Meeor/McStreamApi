@@ -11,6 +11,22 @@ class RewardSelector(
         defaultRewards: List<Map<String, Any?>>,
         onDisabled: (RewardSource, DisabledReward) -> Unit = { _, _ -> },
     ): RewardSelection? {
+        return selectAll(
+            platform = platform,
+            amount = amount,
+            streamerRewards = streamerRewards,
+            defaultRewards = defaultRewards,
+            onDisabled = onDisabled,
+        ).firstOrNull()
+    }
+
+    fun selectAll(
+        platform: String,
+        amount: Long,
+        streamerRewards: List<Map<String, Any?>>,
+        defaultRewards: List<Map<String, Any?>>,
+        onDisabled: (RewardSource, DisabledReward) -> Unit = { _, _ -> },
+    ): List<RewardSelection> {
         val parsedBySource = listOf(
             RewardSource.STREAMER to streamerRewards,
             RewardSource.DEFAULT to defaultRewards,
@@ -20,14 +36,25 @@ class RewardSelector(
             source to parsed.rewards
         }
 
+        val selections = mutableListOf<RewardSelection>()
+        var streamerDuplicateAllowed = false
         for (priority in listOf(EXACT_PRIORITY, RANGE_PRIORITY, PLUS_PRIORITY)) {
             for ((source, rewards) in parsedBySource) {
+                if (source == RewardSource.STREAMER && streamerDuplicateAllowed) {
+                    continue
+                }
                 val samePriority = rewards.filter { it.amountRule.priority == priority }
                 val reward = rewardMatcher.match(samePriority, amount) ?: continue
-                return RewardSelection(reward, source)
+                val selection = RewardSelection(reward, source)
+                selections.add(selection)
+                if (source == RewardSource.STREAMER && reward.allowDuplicate) {
+                    streamerDuplicateAllowed = true
+                    continue
+                }
+                return selections
             }
         }
-        return null
+        return selections
     }
 
     private companion object {

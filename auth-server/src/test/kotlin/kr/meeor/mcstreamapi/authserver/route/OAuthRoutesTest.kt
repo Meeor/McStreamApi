@@ -1,8 +1,13 @@
 package kr.meeor.mcstreamapi.authserver.route
 
+import io.ktor.client.plugins.cookies.HttpCookies
 import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.forms.FormDataContent
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Parameters
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
@@ -56,13 +61,14 @@ class OAuthRoutesTest {
 
         val nonRedirectingClient = createClient {
             followRedirects = false
+            install(HttpCookies)
         }
 
         val start = nonRedirectingClient.get("/oauth/soop/start?pairingCode=A7K29Q")
         assertEquals(HttpStatusCode.Found, start.status)
         assertEquals("https://provider.example/authorize?platform=soop", start.headers["Location"])
 
-        val callback = client.get("/oauth/soop/callback?code=ok")
+        val callback = nonRedirectingClient.get("/oauth/soop/callback?code=ok")
         assertEquals(HttpStatusCode.OK, callback.status)
         assertEquals(true, callback.bodyAsText().contains("인증이 완료되었습니다"))
 
@@ -72,6 +78,104 @@ class OAuthRoutesTest {
         assertEquals(PairingStatus.AUTHORIZED, firstPoll.status)
         assertNotNull(firstPoll.token)
         assertEquals(PairingStatus.CONSUMED, secondPoll.status)
+    }
+
+    @Test
+    fun `soop callback cookie allows concurrent pending requests`() = testApplication {
+        val validatedConfig = validatedConfig("soop")
+        val pairingService = PairingService(InMemoryPairingStore(), pairingExpireSeconds = 600)
+        val stateService = OAuthStateService(
+            store = InMemoryStateStore(),
+            stateExpireSeconds = 600,
+            stateIdGenerator = FixedStateIdGenerator(),
+        )
+        val providerRegistry = OAuthProviderRegistry(listOf(FakeOAuthProvider("soop", supportsState = false)))
+
+        pairingService.createPending(
+            platform = "soop",
+            playerUuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174000"),
+            playerName = "Meeor",
+            pairingCode = "A7K29Q",
+        )
+        pairingService.createPending(
+            platform = "soop",
+            playerUuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174001"),
+            playerName = "Steve",
+            pairingCode = "B7K29Q",
+        )
+
+        application {
+            routing {
+                oauthRoutes(validatedConfig, pairingService, stateService, providerRegistry)
+            }
+        }
+
+        val firstBrowser = createClient {
+            followRedirects = false
+            install(HttpCookies)
+        }
+        val secondBrowser = createClient {
+            followRedirects = false
+            install(HttpCookies)
+        }
+
+        assertEquals(HttpStatusCode.Found, firstBrowser.get("/oauth/soop/start?pairingCode=A7K29Q").status)
+        assertEquals(HttpStatusCode.Found, secondBrowser.get("/oauth/soop/start?pairingCode=B7K29Q").status)
+
+        assertEquals(HttpStatusCode.OK, secondBrowser.get("/oauth/soop/callback?code=ok").status)
+        assertEquals(HttpStatusCode.OK, firstBrowser.get("/oauth/soop/callback?code=ok").status)
+
+        assertEquals(PairingStatus.AUTHORIZED, pairingService.poll("A7K29Q").status)
+        assertEquals(PairingStatus.AUTHORIZED, pairingService.poll("B7K29Q").status)
+    }
+
+    @Test
+    fun `soop callback without cookie can complete with pairing code fallback`() = testApplication {
+        val validatedConfig = validatedConfig("soop")
+        val pairingService = PairingService(InMemoryPairingStore(), pairingExpireSeconds = 600)
+        val stateService = OAuthStateService(
+            store = InMemoryStateStore(),
+            stateExpireSeconds = 600,
+            stateIdGenerator = FixedStateIdGenerator(),
+        )
+        val providerRegistry = OAuthProviderRegistry(listOf(FakeOAuthProvider("soop", supportsState = false)))
+
+        pairingService.createPending(
+            platform = "soop",
+            playerUuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174000"),
+            playerName = "Meeor",
+            pairingCode = "A7K29Q",
+        )
+
+        application {
+            routing {
+                oauthRoutes(validatedConfig, pairingService, stateService, providerRegistry)
+            }
+        }
+
+        val nonRedirectingClient = createClient {
+            followRedirects = false
+        }
+
+        assertEquals(HttpStatusCode.Found, nonRedirectingClient.get("/oauth/soop/start?pairingCode=A7K29Q").status)
+
+        val fallback = client.get("/oauth/soop/callback?code=ok")
+        assertEquals(HttpStatusCode.OK, fallback.status)
+        assertEquals(true, fallback.bodyAsText().contains("SOOP 자동 인증을 완료할 수 없습니다."))
+
+        val completed = client.post("/oauth/soop/callback") {
+            setBody(
+                FormDataContent(
+                    Parameters.build {
+                        append("pairingCode", "A7K29Q")
+                        append("code", "ok")
+                    },
+                ),
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, completed.status)
+        assertEquals(PairingStatus.AUTHORIZED, pairingService.poll("A7K29Q").status)
     }
 
     @Test
@@ -154,7 +258,7 @@ class OAuthRoutesTest {
                     host = "127.0.0.1",
                     port = 18084,
                     publicBaseUrl = "https://auth.example.com/mca",
-                    allowInsecureLocalhost = false,
+                    allowInsecureLocalhost = true,
                 ),
                 security = SecurityConfig(
                     sharedSecret = "mca_abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGH",
@@ -194,7 +298,12 @@ class OAuthRoutesTest {
         )
 
     private class FixedStateIdGenerator : StateIdGenerator {
-        override fun generate(): String = "state-1"
+        private var next = 0
+
+        override fun generate(): String {
+            next++
+            return "state-$next"
+        }
     }
 
     private class FakeOAuthProvider(

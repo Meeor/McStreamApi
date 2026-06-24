@@ -66,6 +66,7 @@ class RewardParser {
                     bonusAmount = bonusAmount,
                     bonusCount = bonusCount,
                     chance = raw.int("chance") ?: Reward.DEFAULT_CHANCE,
+                    allowDuplicate = raw.boolean("allowDuplicate") ?: false,
                     actions = actions,
                 ),
             )
@@ -88,6 +89,18 @@ class RewardParser {
         return when (val value = this[key]) {
             is Number -> value.toLong()
             is String -> value.toLongOrNull()
+            else -> null
+        }
+    }
+
+    private fun Map<String, Any?>.boolean(key: String): Boolean? {
+        return when (val value = this[key]) {
+            is Boolean -> value
+            is String -> when (value.trim().lowercase()) {
+                "true", "yes", "y", "1" -> true
+                "false", "no", "n", "0" -> false
+                else -> null
+            }
             else -> null
         }
     }

@@ -1,10 +1,19 @@
 package kr.meeor.mcstreamapi.command
 
+import kr.meeor.mcstreamapi.auth.AuthClient
+import kr.meeor.mcstreamapi.auth.CancellableTask
+import kr.meeor.mcstreamapi.auth.PairingCodeGenerator
+import kr.meeor.mcstreamapi.auth.PairingConnector
+import kr.meeor.mcstreamapi.auth.PairingRegisterCommand
+import kr.meeor.mcstreamapi.auth.PairingRegisterResult
+import kr.meeor.mcstreamapi.auth.PairingScheduler
 import kr.meeor.mcstreamapi.config.ConfigValidationResult
 import kr.meeor.mcstreamapi.config.PluginAuthConfig
 import kr.meeor.mcstreamapi.config.PluginRuntimeState
 import kr.meeor.mcstreamapi.session.ActiveDonationSession
 import kr.meeor.mcstreamapi.token.ConnectedTokenInfo
+import kr.meeor.mcstreamapi.token.TokenStore
+import java.nio.file.Files
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -19,6 +28,28 @@ class McaCommandServiceTest {
         val result = service.execute(player(), listOf("connect", "chzzk"))
 
         assertEquals("인증 연결 기능이 아직 준비되지 않았습니다.", result.message)
+    }
+
+    @Test
+    fun `soop connect message includes fallback pairing code`() {
+        val root = Files.createTempDirectory("mcstreamapi-command")
+        val connector = PairingConnector(
+            authClientFactory = { FakeAuthClient() },
+            tokenStore = TokenStore(root.resolve("tokens"), root.resolve("secret.key")),
+            scheduler = NoopPairingScheduler(),
+            codeGenerator = FixedCodeGenerator("ABCDEFGH"),
+        )
+        val service = McaCommandService(
+            runtimeStateProvider = { runtimeState(enabledPlatforms = setOf("soop")) },
+            reloadRuntimeState = { runtimeState(enabledPlatforms = setOf("soop")) },
+            pairingConnector = connector,
+        )
+
+        val result = service.execute(player(), listOf("connect", "soop"))
+
+        assertContains(result.message, "SOOP 자동 인증이 실패해 사이트에서 코드를 요구하면")
+        assertContains(result.message, "ABCDEFGH")
+        assertEquals("http://localhost:8080/mca/oauth/soop/start?pairingCode=ABCDEFGH", result.clickUrl)
     }
 
     @Test
@@ -195,5 +226,33 @@ class McaCommandServiceTest {
             type = SenderType.CONSOLE,
             hasPermission = { allPermissions },
         )
+    }
+
+    private class FakeAuthClient : AuthClient {
+        override fun registerPairing(request: PairingRegisterCommand): Result<PairingRegisterResult> {
+            return Result.success(
+                PairingRegisterResult(
+                    pairingCode = request.pairingCode,
+                    status = "PENDING",
+                    expiresInSeconds = 600,
+                    authorizeUrl = "http://localhost:8080/mca/oauth/${request.platform}/start?pairingCode=${request.pairingCode}",
+                ),
+            )
+        }
+
+        override fun getPairing(pairingCode: String) =
+            error("Polling is not used in this test.")
+    }
+
+    private class NoopPairingScheduler : PairingScheduler {
+        override fun repeatAsync(
+            initialDelayTicks: Long,
+            periodTicks: Long,
+            task: () -> Unit,
+        ): CancellableTask = CancellableTask { }
+    }
+
+    private class FixedCodeGenerator(private val code: String) : PairingCodeGenerator() {
+        override fun generate(length: Int): String = code
     }
 }

@@ -23,6 +23,7 @@ class McaBukkitCommand(
         val result = service.execute(sender.toMcaSender(), args.toList())
         result.consoleLog?.let { plugin.logger.info(it) }
         if (result.clickUrl != null && sender is Player) {
+            sender.sendMessage(result.message)
             sender.spigot().sendMessage(
                 TextComponent("[연결하러가기]").apply {
                     color = ChatColor.BLUE

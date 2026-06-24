@@ -660,7 +660,8 @@ platforms:
 
 - clientSecret은 Git에 올리지 않는다.
 - 환경변수 지원 권장.
-- SOOP `GET /auth/code`는 `state`를 받지 않으므로 AuthServer는 SOOP pending OAuth를 플랫폼당 1건으로 제한한다.
+- SOOP `GET /auth/code`는 `state`를 받지 않으므로 AuthServer는 브라우저 쿠키로 pending OAuth를 구분한다.
+- 쿠키를 사용할 수 없는 환경에서는 callback 완료 페이지에서 Minecraft 인증 코드를 다시 입력받아 pending OAuth를 매칭한다.
 
 ---
 
@@ -1717,7 +1718,8 @@ Provider 구현 원칙:
 주의:
 
 - SOOP `GET /auth/code`는 문서상 `state` 파라미터를 받지 않는다.
-- AuthServer는 SOOP OAuth 요청을 플랫폼당 1건만 pending으로 허용하고, state 없이 돌아온 callback은 유일한 pending SOOP state에만 매칭한다.
+- AuthServer는 SOOP OAuth 요청도 여러 건 pending으로 허용하되, state 없이 돌아온 callback은 AuthServer가 발급한 브라우저 쿠키로 매칭한다.
+- 쿠키가 없거나 브라우저가 바뀐 경우에는 callback 완료 페이지에서 Minecraft 인증 코드를 입력받아 해당 pending state와 매칭한다.
 - `POST /user/stationinfo`에는 고유 채널 ID 필드가 없어 현재 구현은 `user_nick`을 `ChannelInfo.channelId` 기준값으로 사용한다.
 - 공개 문서에서 endpoint별 rate limit 정량값은 확인하지 못했다.
 

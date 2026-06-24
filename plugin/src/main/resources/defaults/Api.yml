@@ -2,7 +2,8 @@
 # chzzk amount는 원, soop amount는 별풍선 개수입니다.
 # 조건 형식: "1000"=정확히 / "1000-5000"=양 끝 포함 범위 / "5000+"=이상
 # 선택 순서: 전용 고정 > 공용 고정 > 전용 범위 > 공용 범위 > 전용 플러스 > 공용 플러스
-# 후원 이벤트 하나에는 보상 하나만 실행됩니다. 같은 단계 후보는 chance 가중치로 하나를 뽑습니다.
+# 기본적으로 후원 이벤트 하나에는 보상 하나만 실행됩니다. 같은 단계 후보는 chance 가중치로 하나를 뽑습니다.
+# streamer-rewards.yml 전용 보상에 allowDuplicate: true를 넣은 경우에만 전용 보상 후 공용 보상도 1개 이어서 실행됩니다.
 # 문자열에서 사용 가능: &a 색상, &l 굵게, &r 초기화, &#12ABEF HEX
 # 공통 placeholder: {player}, {player_uuid}, {streamer}, {platform}, {donator}, {amount}, {message}, {unit_count}
 # 랜덤 placeholder: {random.키}, {random.키.value}, {random.키.display}, {random.키.amount}

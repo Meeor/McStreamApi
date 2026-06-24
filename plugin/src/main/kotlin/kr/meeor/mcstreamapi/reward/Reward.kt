@@ -7,6 +7,7 @@ data class Reward(
     val bonusAmount: Long? = null,
     val bonusCount: Long? = null,
     val chance: Int = DEFAULT_CHANCE,
+    val allowDuplicate: Boolean = false,
     val actions: List<Map<String, Any?>>,
 ) {
     fun unitCount(amount: Long): Long {

@@ -45,6 +45,7 @@ class RewardParserTest {
 
         assertEquals(1, result.rewards.size)
         assertEquals(Reward.DEFAULT_CHANCE, result.rewards.single().chance)
+        assertEquals(false, result.rewards.single().allowDuplicate)
         assertEquals(100, result.rewards.single().unitAmount)
         assertEquals(1000, result.rewards.single().bonusAmount)
         assertEquals(1, result.rewards.single().bonusCount)
@@ -56,5 +57,22 @@ class RewardParserTest {
             listOf("invalid_amount", "missing_actions", "invalid_unit_amount", "incomplete_bonus"),
             result.disabledRewards.map { it.id },
         )
+    }
+
+    @Test
+    fun `parses allow duplicate option`() {
+        val result = RewardParser().parse(
+            platform = "soop",
+            rawRewards = listOf(
+                mapOf(
+                    "id" to "message_only",
+                    "amount" to "100+",
+                    "allowDuplicate" to true,
+                    "actions" to listOf(mapOf("type" to "broadcast")),
+                ),
+            ),
+        )
+
+        assertEquals(true, result.rewards.single().allowDuplicate)
     }
 }

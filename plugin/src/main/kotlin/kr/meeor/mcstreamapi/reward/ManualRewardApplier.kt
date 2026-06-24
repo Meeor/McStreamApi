@@ -133,7 +133,7 @@ class ManualRewardApplier(
         for (platform in platforms) {
             val streamerRewards = streamerConfig.rewards(playerUuid, platform)
             val defaultRewards = if (streamerOnly) emptyList() else config.rewardsByPlatform[platform].orEmpty()
-            val selection = rewardSelector.select(
+            val selections = rewardSelector.selectAll(
                 platform = platform,
                 amount = amount,
                 streamerRewards = streamerRewards,
@@ -141,10 +141,10 @@ class ManualRewardApplier(
             ) { source, disabled ->
                 logger?.warning(
                     "REWARD_DISABLED source=${source.name.lowercase()} platform=$platform " +
-                        "rewardId=${disabled.id} reason=${disabled.reason}",
+                    "rewardId=${disabled.id} reason=${disabled.reason}",
                 )
             }
-            if (selection == null) {
+            if (selections.isEmpty()) {
                 logger?.debug(
                     "§e[대기] 후원 reward 매칭 실패: platform=$platform player=$playerName " +
                         "donator=$donatorName amount=$amount streamerRewards=${streamerRewards.size} " +
@@ -152,48 +152,58 @@ class ManualRewardApplier(
                 )
                 continue
             }
-            val reward = selection.reward
-            val source = selection.source.name.lowercase()
-            val parsedActions = actionParser.parse(reward.actions)
-            parsedActions.disabledActions.forEach { disabled ->
-                logger?.warning(
-                    "ACTION_DISABLED source=$source platform=$platform rewardId=${reward.id} " +
-                        "actionIndex=${disabled.index} actionType=${disabled.type} reason=${disabled.reason}",
-                )
-            }
-            if (parsedActions.actions.isEmpty()) {
-                logger?.warning("REWARD_NO_EXECUTABLE_ACTION source=$source platform=$platform rewardId=${reward.id}")
-                return ManualRewardApplyResult.Failure("선택된 reward에 실행 가능한 action이 없습니다. reward=${reward.id}")
-            }
 
-            val context = ActionContext(
-                playerName = playerName,
-                rewardId = reward.id,
-                placeholderContext = PlaceholderContext(
+            val rewardIds = mutableListOf<String>()
+            var actionCount = 0
+            var failedCount = 0
+            for (selection in selections) {
+                val reward = selection.reward
+                val source = selection.source.name.lowercase()
+                val parsedActions = actionParser.parse(reward.actions)
+                parsedActions.disabledActions.forEach { disabled ->
+                    logger?.warning(
+                        "ACTION_DISABLED source=$source platform=$platform rewardId=${reward.id} " +
+                            "actionIndex=${disabled.index} actionType=${disabled.type} reason=${disabled.reason}",
+                    )
+                }
+                if (parsedActions.actions.isEmpty()) {
+                    logger?.warning("REWARD_NO_EXECUTABLE_ACTION source=$source platform=$platform rewardId=${reward.id}")
+                    return ManualRewardApplyResult.Failure("선택된 reward에 실행 가능한 action이 없습니다. reward=${reward.id}")
+                }
+
+                val context = ActionContext(
                     playerName = playerName,
-                    playerUuid = playerUuid,
-                    streamerName = streamerName,
-                    platform = platform,
-                    donatorName = donatorName,
-                    amount = amount,
-                    unitCount = reward.unitCount(amount),
-                    message = message,
                     rewardId = reward.id,
-                ),
-                customItems = customItems,
-            )
-            val results = actionExecutor.execute(context, parsedActions.actions)
-            val failed = results.filterNot { it.success }
-            failed.forEachIndexed { index, result ->
-                logger?.warning(
-                    "ACTION_EXECUTION_FAILED source=$source platform=$platform rewardId=${reward.id} " +
-                        "actionIndex=$index actionType=${result.actionType} reason=${result.message}",
+                    placeholderContext = PlaceholderContext(
+                        playerName = playerName,
+                        playerUuid = playerUuid,
+                        streamerName = streamerName,
+                        platform = platform,
+                        donatorName = donatorName,
+                        amount = amount,
+                        unitCount = reward.unitCount(amount),
+                        message = message,
+                        rewardId = reward.id,
+                    ),
+                    customItems = customItems,
                 )
+                val results = actionExecutor.execute(context, parsedActions.actions)
+                val failed = results.filterNot { it.success }
+                failed.forEachIndexed { index, result ->
+                    logger?.warning(
+                        "ACTION_EXECUTION_FAILED source=$source platform=$platform rewardId=${reward.id} " +
+                            "actionIndex=$index actionType=${result.actionType} reason=${result.message}",
+                    )
+                }
+                rewardIds.add(reward.id)
+                actionCount += results.size
+                failedCount += failed.size
             }
-            return if (failed.isEmpty()) {
-                ManualRewardApplyResult.Success(reward.id, platform, results.size)
+            val rewardId = rewardIds.joinToString(",")
+            return if (failedCount == 0) {
+                ManualRewardApplyResult.Success(rewardId, platform, actionCount)
             } else {
-                ManualRewardApplyResult.PartialSuccess(reward.id, platform, results.size, failed.size)
+                ManualRewardApplyResult.PartialSuccess(rewardId, platform, actionCount, failedCount)
             }
         }
 

@@ -109,10 +109,39 @@ class RewardSelectorTest {
         assertEquals("default", selected?.reward?.id)
     }
 
-    private fun reward(id: String, amount: String): Map<String, Any?> {
+    @Test
+    fun `streamer reward with duplicate option continues to matching default reward`() {
+        val selected = selector.selectAll(
+            platform = "soop",
+            amount = 1000,
+            streamerRewards = listOf(reward("streamer-message", "100+", allowDuplicate = true)),
+            defaultRewards = listOf(reward("default-reward", "100+")),
+        )
+
+        assertEquals(listOf("streamer-message", "default-reward"), selected.map { it.reward.id })
+        assertEquals(listOf(RewardSource.STREAMER, RewardSource.DEFAULT), selected.map { it.source })
+    }
+
+    @Test
+    fun `streamer duplicate option does not execute another streamer reward`() {
+        val selected = selector.selectAll(
+            platform = "soop",
+            amount = 1000,
+            streamerRewards = listOf(
+                reward("streamer-exact", "1000", allowDuplicate = true),
+                reward("streamer-plus", "100+"),
+            ),
+            defaultRewards = listOf(reward("default-plus", "100+")),
+        )
+
+        assertEquals(listOf("streamer-exact", "default-plus"), selected.map { it.reward.id })
+    }
+
+    private fun reward(id: String, amount: String, allowDuplicate: Boolean = false): Map<String, Any?> {
         return mapOf(
             "id" to id,
             "amount" to amount,
+            "allowDuplicate" to allowDuplicate,
             "actions" to listOf(mapOf("type" to "broadcast", "message" to id)),
         )
     }

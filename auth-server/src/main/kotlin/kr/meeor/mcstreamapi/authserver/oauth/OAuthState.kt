@@ -26,23 +26,21 @@ class InMemoryStateStore {
             state
         }
 
-    fun createExclusiveForPlatform(state: OAuthState, now: Instant): OAuthState =
-        synchronized(states) {
-            removeExpiredLocked(now)
-            val hasActive = states.values.any { it.platform == state.platform }
-            require(!hasActive) {
-                "OAuth state already exists for platform."
-            }
-            require(!states.containsKey(state.stateId)) {
-                "OAuth state already exists."
-            }
-            states[state.stateId] = state
-            state
-        }
-
     fun consume(stateId: String): OAuthState? =
         synchronized(states) {
             states.remove(stateId)
+        }
+
+    fun consumeForPairingCode(pairingCode: String, platform: String, now: Instant): OAuthState? =
+        synchronized(states) {
+            removeExpiredLocked(now)
+            val state = states.values.firstOrNull {
+                it.pairingCode == pairingCode && it.platform == platform
+            }
+            if (state != null) {
+                states.remove(state.stateId)
+            }
+            state
         }
 
     fun consumeExclusiveForPlatform(platform: String, now: Instant): ExclusiveStateConsumeResult =
@@ -98,25 +96,6 @@ class OAuthStateService(
         )
     }
 
-    fun createExclusiveForPlatform(pairingCode: String, platform: String): OAuthState {
-        val now = clock.instant()
-        val normalizedPlatform = platform.lowercase()
-        return try {
-            store.createExclusiveForPlatform(
-                OAuthState(
-                    stateId = stateIdGenerator.generate(),
-                    pairingCode = pairingCode,
-                    platform = normalizedPlatform,
-                    createdAt = now,
-                    expiresAt = now.plus(Duration.ofSeconds(stateExpireSeconds)),
-                ),
-                now,
-            )
-        } catch (exception: IllegalArgumentException) {
-            throw OAuthStateException("OAUTH_STATE_ALREADY_PENDING", "Another OAuth request is already pending for this platform.")
-        }
-    }
-
     fun consume(stateId: String, platform: String): OAuthStateResult {
         val state = store.consume(stateId)
             ?: return OAuthStateResult.Invalid("OAUTH_STATE_NOT_FOUND", "OAuth state was not found.")
@@ -141,13 +120,15 @@ class OAuthStateService(
         }
     }
 
+    fun consumeForPairingCode(pairingCode: String, platform: String): OAuthStateResult {
+        val normalizedPlatform = platform.lowercase()
+        val state = store.consumeForPairingCode(pairingCode, normalizedPlatform, clock.instant())
+            ?: return OAuthStateResult.Invalid("OAUTH_STATE_NOT_FOUND", "OAuth state was not found.")
+        return OAuthStateResult.Valid(state)
+    }
+
     fun removeExpired(): Int = store.removeExpired(clock.instant())
 }
-
-class OAuthStateException(
-    val error: String,
-    override val message: String,
-) : RuntimeException(message)
 
 sealed class ExclusiveStateConsumeResult {
     data object NotFound : ExclusiveStateConsumeResult()

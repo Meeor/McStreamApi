@@ -308,7 +308,7 @@ McStreamApi/
 진행 메모:
 
 - 2026-06-10 공식 SOOP OpenAPI iframe 문서 확인 기준: API base는 `https://openapi.sooplive.com`, authorize endpoint는 `GET /auth/code`, token/refresh endpoint는 `POST /auth/token`, 채널/스테이션 정보 조회는 `POST /user/stationinfo`이다.
-- SOOP `GET /auth/code`는 문서상 `state` 파라미터가 없으므로 AuthServer는 SOOP OAuth 시작을 플랫폼당 1건만 pending으로 제한하고, state 없이 돌아온 callback은 유일한 pending SOOP state에만 매칭한다.
+- SOOP `GET /auth/code`는 문서상 `state` 파라미터가 없으므로 AuthServer는 브라우저 쿠키로 pending OAuth를 구분하고, 쿠키가 없으면 Minecraft 인증 코드 입력 fallback으로 매칭한다.
 - `POST /user/stationinfo` 응답에는 Chzzk의 `channelId` 같은 고유 채널 ID가 문서상 없어서 `user_nick`을 `ChannelInfo.channelId`와 `channelName`의 기준값으로 사용한다.
 - 공개 SOOP 문서에서 endpoint별 rate limit 정량값은 확인하지 못했다. 오류 형식은 여러 API가 `result=1` 성공, 음수 `result` 오류와 `msg` 메시지를 사용한다.
 
